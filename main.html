@@ -263,13 +263,38 @@
         lastDx = Math.max(-1, Math.min(1, dx));
         lastDz = -Math.max(-1, Math.min(1, dz));
       }
+      window.addEventListener("keydown", function (e) {
+        if (e.key === "ArrowUp") {
+          lastDx = 0;
+          lastDz = 1;
+        }
+        if (e.key === "ArrowDown") {
+          lastDx = 0;
+          lastDz = -1;
+        }
+        if (e.key === "ArrowLeft") {
+          lastDx = -1;
+          lastDz = 0;
+        }
+        if (e.key === "ArrowRight") {
+          lastDx = 1;
+          lastDz = 0;
+        }
+      });
 
+      window.addEventListener("keyup", function (e) {
+        if (
+          ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)
+        ) {
+          lastDx = 0;
+          lastDz = 0;
+        }
+      });
       // Apply pan at a fixed interval (every 100ms)
       setInterval(() => {
         targetOffsetX += lastDx * panStep;
         targetOffsetZ += lastDz * panStep;
       }, 100);
-
       // --- UI Wiring ---
       // Serial button handlers removed
       document.getElementById("simulateBtn").onclick = () => {
@@ -282,11 +307,13 @@
         document.getElementById("manualInput").value = "";
       };
 
-      // Snap camera to city overlay origin on 'x' key press
       window.addEventListener("keydown", function (e) {
         if (e.key === "x" || e.key === "X") {
           targetOffsetX = 0;
           targetOffsetZ = 0;
+        }
+        if (e.key === "Space") {
+          switchFreqs();
         }
       });
 
@@ -298,6 +325,20 @@
       let cityOverlayLoaded = false,
         citySharpLoaded = false;
       let font;
+      function switchFreqs() {
+        useSharpNoise = !useSharpNoise;
+        if (useSharpNoise) {
+          baseNoiseScale = 0.004;
+          panStep = panSpeed * baseNoiseScale;
+        } else {
+          baseNoiseScale = 0.006;
+          panStep = panSpeed * baseNoiseScale;
+        }
+        console.log(
+          "Switched to " + (useSharpNoise ? "high" : "low") + " frequency"
+        );
+      }
+
       let sketch = (p) => {
         p.preload = function () {
           cityOverlayImg = p.loadImage("city-overlay.png", () => {
@@ -307,6 +348,8 @@
             citySharpLoaded = true;
           });
           font = p.loadFont("proximanova_regular.ttf");
+          switchFreqs();
+          switchFreqs();
         };
         p.setup = function () {
           p.createCanvas(p.windowWidth, p.windowHeight, p.WEBGL);
@@ -319,20 +362,10 @@
 
           // Button event for switching frequencies
           document.getElementById("switchFreqBtn").onclick = function () {
-            useSharpNoise = !useSharpNoise;
+            switchFreqs();
             this.textContent = useSharpNoise
               ? "Switch to low frequency"
               : "Switch to high frequency";
-            if (useSharpNoise) {
-              baseNoiseScale = 0.004;
-              panStep = panSpeed * baseNoiseScale;
-            } else {
-              baseNoiseScale = 0.006;
-              panStep = panSpeed * baseNoiseScale;
-            }
-            console.log(
-              "Switched to " + (useSharpNoise ? "high" : "low") + " frequency"
-            );
           };
         };
 
@@ -381,9 +414,9 @@
             // Calculate screen position so overlay moves with noise
             let offsetMul = 0.861;
             if (useSharpNoise) {
-              offsetMul = 0.861 / 2;
+              offsetMul = 0.861;
             } else if (!useSharpNoise) {
-              offsetMul = 0.861 / 2;
+              offsetMul = 0.861;
             }
             let screenX = p.width / 2 - (offsetX * offsetMul) / baseNoiseScale;
             let screenY = p.height / 2 + (offsetZ * offsetMul) / baseNoiseScale;
@@ -421,7 +454,6 @@
           p.resetMatrix();
           p.ortho();
           p.translate(-p.width / 2, -p.height / 2);
-          console.log("Canvas size:", p.width, p.height);
           /*
           // Horizontal glitch lines (many, subtle)
           let glitchLineCount = 12 + Math.floor(Math.random() * 8);
@@ -467,7 +499,6 @@
 
             let alpha = 0 + Math.random() * 80;
             let thickness = 3;
-            console.log(`Drawing line from (${x1}, ${y}) to (${x2}, ${y})`);
             p.push();
             p.stroke(255, 255, 255, alpha);
             p.strokeWeight(thickness);
