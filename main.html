@@ -30,6 +30,17 @@
   <head>
     <meta charset="utf-8" />
     <title>Simulation</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+      integrity="sha384-EVSTQN3/azprG1Anm3QDgpJLIm9Nao0Yz1ztcQTwFspd3yD65VohhpuuCOmLASjC"
+      crossorigin="anonymous"
+    />
+    <script
+      src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"
+      integrity="sha384-MrcW6ZMFYlzcLA8Nl+NtUVF0sA7MsXsP1UyJoMp4YLEuNSfAP+JcXn/tWtIaxVXM"
+      crossorigin="anonymous"
+    ></script>
     <script src="https://cdn.jsdelivr.net/npm/p5@1.6.0/lib/p5.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/0.8.0/addons/p5.dom.min.js"></script>
 
@@ -73,17 +84,27 @@
   </head>
   <body>
     <div id="ui">
-      <!-- Serial buttons removed -->
-      <button id="simulateBtn">Simulate</button>
-      <button id="switchFreqBtn">Switch frequencies</button>
-      <button id="restartBleBtn">Restart BLE</button>
-      <div>
-        <input id="manualInput" placeholder="UP/DOWN/LEFT/RIGHT or (x,y,z)" />
-        <button id="sendManual">Send</button>
+      <button id="simulateBtn" class="btn btn-secondary btn-sm mb-1">
+        Simulate
+      </button>
+      <button id="switchFreqBtn" class="btn btn-secondary btn-sm mb-1">
+        Switch frequencies
+      </button>
+      <button id="restartBleBtn" class="btn btn-secondary btn-sm mb-1">
+        Restart BLE
+      </button>
+      <div class="mt-2">
+        <input
+          id="manualInput"
+          class="form-control form-control-sm d-inline-block"
+          style="width: 150px"
+          placeholder="UP/DOWN/LEFT/RIGHT or (x,y,z)"
+        />
+        <button id="sendManual" class="btn btn-secondary btn-sm ms-1">
+          Send
+        </button>
       </div>
-
-      <!-- Serial status removed -->
-      <div id="lastCmd">Input: —</div>
+      <div id="lastCmd" class="mt-2">Input: —</div>
       <div id="log"></div>
     </div>
 
