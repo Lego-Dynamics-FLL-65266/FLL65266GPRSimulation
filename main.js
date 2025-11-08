@@ -61,8 +61,8 @@ function startBleProcess() {
             deltaZ = 0;
           }
         } else {
-          deltaX = rawX / 16384;
-          deltaZ = rawZ / 16384;
+          deltaX = rawX / 8192;
+          deltaZ = rawZ / 8192;
         }
 
         currentPosition.x -= deltaX;
