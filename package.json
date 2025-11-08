@@ -1,23 +1,50 @@
 {
-  "name": "gprtesternode",
+  "name": "unearthedsimulationgpr65266",
   "version": "1.0.0",
-  "description": "",
+  "description": "Electron-based GPR simulation for FLL 2025-26 Innovation Project - Lego Dynamivs Team #65266",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "package": "electron-forge package"
+    "package": "electron-forge package",
+    "make": "electron-forge make"
   },
   "author": "Arcmyx & The Lego Dynamics FLL Team",
   "license": "ISC",
   "devDependencies": {
     "@abandonware/noble": "^1.9.2-26",
     "concurrently": "^9.2.1",
-    "electron": "^38.2.0"
+    "@electron-forge/cli": "^7.8.3",
+    "@electron-forge/maker-deb": "^7.8.3",
+    "@electron-forge/maker-rpm": "^7.8.3",
+    "@electron-forge/maker-squirrel": "^7.8.3",
+    "@electron-forge/maker-zip": "^7.8.3",
+    "@electron-forge/plugin-auto-unpack-natives": "^7.8.3",
+    "@electron-forge/plugin-fuses": "^7.8.3",
+    "@electron/fuses": "^1.8.0",
+    "electron": "^37.2.4"
   },
   "dependencies": {
     "body-parser": "^2.2.0",
     "express": "^5.1.0",
     "noble-winrt": "^0.1.1",
     "p5play": "^3.33.5"
+  },
+  "config": {
+    "forge": {
+      "makers": [
+        {
+          "name": "@electron-forge/maker-squirrel",
+          "config": {
+            "name": "GPRTesterNode"
+          }
+        },
+        {
+          "name": "@electron-forge/maker-zip",
+          "platforms": [
+            "win32"
+          ]
+        }
+      ]
+    }
   }
 }
