@@ -93,6 +93,9 @@
       <button id="restartBleBtn" class="btn btn-secondary btn-sm mb-1">
         Restart BLE
       </button>
+      <button onclick="toggleRendering()" class="btn btn-secondary btn-sm mb-1">
+        Toggle Rendering
+      </button>
       <div class="mt-2">
         <input
           id="manualInput"
@@ -346,8 +349,11 @@
           targetOffsetX = 0;
           targetOffsetZ = 0;
         }
-        if (e.key === "Space") {
+        if (e.key === "m") {
           switchFreqs();
+        }
+        if (e.key === "g") {
+          toggleRendering();
         }
       });
 
@@ -359,6 +365,9 @@
       let cityOverlayLoaded = false,
         citySharpLoaded = false;
       let font;
+      function toggleRendering() {
+        rendering = !rendering;
+      }
       function switchFreqs() {
         useSharpNoise = !useSharpNoise;
         if (useSharpNoise) {
@@ -402,6 +411,7 @@
               : "Switch to high frequency";
           };
         };
+        rendering = true;
 
         p.draw = function () {
           // Use background(0) for reliable clearing in WEBGL
@@ -416,7 +426,9 @@
           offsetZ += (targetOffsetZ - offsetZ) * Math.min(panSpeed * dt, 1.0);
 
           const effectiveNoiseScale = baseNoiseScale;
-          p.shader(terrainShader);
+          if (rendering) {
+            p.shader(terrainShader);
+          }
           terrainShader.setUniform("uOffsetX", offsetX);
           terrainShader.setUniform("uOffsetY", offsetZ);
           terrainShader.setUniform("uNoiseScale", effectiveNoiseScale);
@@ -504,21 +516,21 @@
           // Horizontal glitch lines (always visible)
           const minGlitchDistance = 0;
           const maxGlitchDistance = 500000;
-
-          function generateRandomPoint(min, max) {
-            return Math.floor(Math.random() * (max - min + 1)) + min;
-          }
-          for (let i = 0; i < 12 + Math.floor(Math.random() * 8); i++) {
-            let y = generateRandomPoint(0, p.height - 1);
-            let x1 = generateRandomPoint(
-              minGlitchDistance,
-              p.width - minGlitchDistance
-            );
-            let x2 = generateRandomPoint(
-              minGlitchDistance,
-              p.width - minGlitchDistance
-            );
-            /*
+          if (rendering) {
+            function generateRandomPoint(min, max) {
+              return Math.floor(Math.random() * (max - min + 1)) + min;
+            }
+            for (let i = 0; i < 12 + Math.floor(Math.random() * 8); i++) {
+              let y = generateRandomPoint(0, p.height - 1);
+              let x1 = generateRandomPoint(
+                minGlitchDistance,
+                p.width - minGlitchDistance
+              );
+              let x2 = generateRandomPoint(
+                minGlitchDistance,
+                p.width - minGlitchDistance
+              );
+              /*
             while (x1 === x2) {
               x2 = generateRandomPoint(
                 minGlitchDistance,
@@ -526,28 +538,29 @@
               );
             }*/
 
-            let alpha = 0 + Math.random() * 80;
-            let thickness = 3;
-            p.push();
-            p.stroke(255, 255, 255, alpha);
-            p.strokeWeight(thickness);
-            p.line(x1, y, x2, y);
-            p.pop();
-          }
-
-          // Occasional major glitch bars (rare, bold)
-          if (Math.random() < 0.05) {
-            let barCount = 1 + Math.floor(Math.random() * 2);
-            for (let i = 0; i < barCount; i++) {
-              let y = Math.floor(Math.random() * p.height);
-              let barHeight = 6 + Math.random() * 16;
-              let alpha = 120 + Math.random() * 100;
-              let color = 200 + Math.random() * 55;
+              let alpha = 0 + Math.random() * 80;
+              let thickness = 3;
               p.push();
-              p.noStroke();
-              p.fill(color, color, color, alpha);
-              p.rect(0, y, p.width, barHeight);
+              p.stroke(255, 255, 255, alpha);
+              p.strokeWeight(thickness);
+              p.line(x1, y, x2, y);
               p.pop();
+            }
+
+            // Occasional major glitch bars (rare, bold)
+            if (Math.random() < 0.05) {
+              let barCount = 1 + Math.floor(Math.random() * 2);
+              for (let i = 0; i < barCount; i++) {
+                let y = Math.floor(Math.random() * p.height);
+                let barHeight = 6 + Math.random() * 16;
+                let alpha = 120 + Math.random() * 100;
+                let color = 200 + Math.random() * 55;
+                p.push();
+                p.noStroke();
+                p.fill(color, color, color, alpha);
+                p.rect(0, y, p.width, barHeight);
+                p.pop();
+              }
             }
           }
           // UI text overlay

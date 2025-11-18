@@ -25,12 +25,26 @@ function createWindows() {
 
   visualizerWindow.loadFile("main.html");
   joystickWindow.loadFile("joystick.html");
-  visualizerWindow.on("closed", () => {
+  // When any window is closed, quit the app.
+  // Use 'closed' event to allow cleanup of child processes and avoid
+  // sending to destroyed webContents.
+  function onAnyWindowClosed() {
+    // Kill BLE child if running
+    if (bleProcess && !bleProcess.killed) {
+      try {
+        bleProcess.kill();
+      } catch (e) {
+        console.warn(
+          "[main.js] Error killing BLE process during window close",
+          e
+        );
+      }
+    }
     app.quit();
-  });
-  joystickWindow.on("closed", () => {
-    app.quit();
-  });
+  }
+
+  visualizerWindow.on("closed", onAnyWindowClosed);
+  joystickWindow.on("closed", onAnyWindowClosed);
 }
 let bleProcess;
 let currentPosition = { x: 0, z: 0 };
@@ -69,13 +83,43 @@ function startBleProcess() {
         currentPosition.z += deltaZ;
         console.log(currentPosition);
         const vector = { x: currentPosition.x, y: 0, z: currentPosition.z };
-        visualizerWindow.webContents.send("vectorCommand", vector);
+        // Guard against sending to a destroyed or null window
+        if (
+          visualizerWindow &&
+          !visualizerWindow.isDestroyed() &&
+          visualizerWindow.webContents
+        ) {
+          try {
+            visualizerWindow.webContents.send("vectorCommand", vector);
+          } catch (e) {
+            console.warn(
+              "[main.js] Failed to send vectorCommand to visualizerWindow",
+              e
+            );
+          }
+        } else {
+          // If visualizer isn't available, log and retain the vector state
+          console.warn(
+            "[main.js] visualizerWindow not available to receive vectorCommand"
+          );
+        }
       } else {
         console.warn("[main.js] Failed to parse vectorCommand:", msg.payload);
       }
     }
   });
 }
+
+// Ensure BLE child is killed on app quit (covers cases where windows are closed by OS)
+app.on("before-quit", () => {
+  if (bleProcess && !bleProcess.killed) {
+    try {
+      bleProcess.kill();
+    } catch (e) {
+      console.warn("[main.js] Error killing BLE process during app quit", e);
+    }
+  }
+});
 function sigmoid(x) {
   return x / (1 + Math.abs(x)); // smoother than tanh, bounded between -1 and 1
 }
