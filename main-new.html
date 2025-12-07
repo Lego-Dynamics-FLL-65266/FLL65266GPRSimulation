@@ -120,6 +120,8 @@
 
       // Paraboloid slice response in pixel space:
       // z(x, s) = dPx + aPx*(x - hPx)^2 + bPx*(sPx - kPx)^2
+      // widthPx controls observed thickness. maxBelowPx / horizLimit are
+      // used to stop parabola drawing beyond a vertical/horizontal cutoff.
       float paraboloidSliceResponsePx(
         float xPx,    // screen x in pixels
         float yPx,    // screen y in pixels (depth)
@@ -129,12 +131,32 @@
         float dPx,    // apex depth (z) in pixels
         float aPx,    // curvature along x (pixels^-1)
         float bPx,    // curvature along slice (pixels^-1)
-        float widthPx // thickness in pixels
+        float widthPx, // thickness in pixels
+        float maxBelowPx // how far below the apex the parabola still reflects
       ) {
+        // quick estimates to kill tails (prevents infinite drawing)
+        // if the current scanline (yPx) is much deeper than the apex, skip it
+        if (yPx - dPx > maxBelowPx) return 0.0;
+
+        // compute a conservative horizontal limit: solve for (x-h)^2 term where
+        // aPx*(x-h)^2 = maxBelowPx (approx), so |x-h| < sqrt(maxBelowPx / aPx)
+        // add a small margin so things look natural
+        float horizLimit = sqrt(maxBelowPx / max(abs(aPx), 1e-6)) + 20.0;
+        if (abs(xPx - hPx) > horizLimit) return 0.0;
+
         float zPx = dPx + aPx * (xPx - hPx) * (xPx - hPx)
                           + bPx * (sPx - kPx) * (sPx - kPx);
+
         float d = abs(yPx - zPx);
-        return 1.0 / (1.0 + pow(d / widthPx, 8.0));
+
+        // stronger falloff for larger difference
+        float base = 1.0 / (1.0 + pow(d / widthPx, 8.0));
+
+        // fade out smoothly as we approach the maxBelowPx region to avoid hard edges
+        float below = clamp((maxBelowPx - (yPx - dPx)) / maxBelowPx, 0.0, 1.0);
+        float fade = smoothstep(0.0, 1.0, below);
+
+        return base * fade;
       }
 
       void main() {
@@ -144,7 +166,6 @@
         vec2 uv = gl_FragCoord.xy / uResolution;
 
         // Lateral slice axis scaling: map uSliceDepth (0..1) to a meaningful pixel range.
-        // Increase sScalePx if you want slice to have a stronger effect on width/visibility.
         float sScalePx = 0.6 * uResolution.x;       // lateral axis spans ~60% of screen width
         float sPx      = uSliceDepth * sScalePx;     // current slice position in pixels
 
@@ -155,7 +176,7 @@
         // Speckle
         float grain = (hash(gl_FragCoord.xy + uTime * 60.0) - 0.5) * 0.10;
 
-        // Accumulate strongest reflector
+        // Accumulate strongest reflector (we keep max so nearer/stronger reflections show)
         float objects = 0.0;
 
         // Movement scale: make uScanX (0..1) span the full width in pixels
@@ -169,25 +190,41 @@
           // Apex x in pixels: base spacing + unbounded offset via scanPx
           float hPx = 80.0 + fi * 70.0 + scanPx;
 
-          // Apex depth (vertex) in pixels
+          // Apex depth (vertex) in pixels (0..1 mapped -> pixels)
           float dPx = mix(0.15, 0.85, fract(fi * 0.37)) * uResolution.y;
 
           // Apex lateral k in pixels (must be in same units as sPx)
           float kPx = (0.2 + fract(fi * 0.19 + 0.37) * 0.6) * sScalePx;
 
-          // Curvature along x (pixels^-1): increase for tighter downward opening
-          float aPx = mix(0.0010, 0.0030, fract(fi * 0.77));
-
-          // Curvature along slice (pixels^-1): controls how slice changes width/visibility
-          float bPx = mix(0.0008, 0.0035, fract(fi * 0.53));
-
           // Curve thickness (pixels)
           float widthPx = mix(2.0, 5.0, fract(fi * 0.41));
 
-          // Downward opening achieved because z increases with squared distance
-          float falloff = paraboloidSliceResponsePx(xPx, yPx, sPx, hPx, kPx, dPx, aPx, bPx, widthPx);
+          // ---------- Depth-shaped curvature ----------
+          // We want: small a near surface, large a in the middle, tiny a at bottom.
+          // Build a bell-shaped weight peaked at mid-depth to interpolate between
+          // a_small (surface), a_mid (middle), a_tiny (bottom).
+          float depthNorm = dPx / uResolution.y; // 0..1
+          // gaussian-like peak around mid (0.5), width controls how wide the "middle" region is
+          float peak = exp(-pow((depthNorm - 0.5) / 0.18, 2.0));
 
-          // Keep strongest (prevents intersection smearing)
+          // range: tiny at extremes -> mid-high in middle
+          float a_min = 0.00025;   // near-surface / bottom (very gentle)
+          float a_max = 0.0045;    // middle (strong curvature)
+          float aPx = -2.0 * mix(a_min, a_max, peak);
+
+          // If you want a deterministic variation keep some per-fi mixing like before:
+          aPx *= mix(0.9, 1.15, fract(fi * 0.77));
+
+          // optionally let slice curvature vary a bit too
+          float bPx = mix(0.0008, 0.0035, fract(fi * 0.53));
+
+          // Now define how far below the apex we allow the parabola to contribute.
+          // Make this depend on widthPx (thicker features persist a little further).
+          float maxBelowPx = 8.0 * widthPx; // tune this multiplier for longer/shorter tails
+          // compute falloff but only if we're in the relevant vertical/horizontal range
+          float falloff = paraboloidSliceResponsePx(xPx, yPx, sPx, hPx, kPx, dPx, aPx, bPx, widthPx, maxBelowPx);
+
+          // Keep strongest (prevents intersection smearing and approximates stacking / occlusion)
           objects = max(objects, falloff);
         }
 
