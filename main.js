@@ -23,7 +23,7 @@ function createWindows() {
     },
   });
 
-  visualizerWindow.loadFile("main.html");
+  visualizerWindow.loadFile("main-new.html");
   joystickWindow.loadFile("joystick.html");
   // When any window is closed, quit the app.
   // Use 'closed' event to allow cleanup of child processes and avoid

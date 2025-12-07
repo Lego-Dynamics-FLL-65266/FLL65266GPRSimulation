@@ -1,0 +1,396 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Simulation</title>
+    <link
+      href="deps/bootstrap.min.css"
+      rel="stylesheet"
+      integrity="sha384-EVSTQN3/azprG1Anm3QDgpJLIm9Nao0Yz1ztcQTwFspd3yD65VohhpuuCOmLASjC"
+      crossorigin="anonymous"
+    />
+    <script
+      src="deps/bootstrap.bundle.min.js"
+      integrity="sha384-MrcW6ZMFYlzcLA8Nl+NtUVF0sA7MsXsP1UyJoMp4YLEuNSfAP+JcXn/tWtIaxVXM"
+      crossorigin="anonymous"
+    ></script>
+    <script src="deps/p5.min.js"></script>
+    <script src="deps/p5.dom.min.js"></script>
+
+    <style>
+      html,
+      body,
+      canvas {
+        margin: 0;
+        padding: 0;
+        width: 100vw;
+        height: 100vh;
+        overflow: hidden;
+        box-sizing: border-box;
+      }
+      canvas {
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        width: 100vw !important;
+        height: 100vh !important;
+        z-index: 0 !important;
+        display: block !important;
+        background: black;
+      }
+      #ui {
+        position: fixed;
+        top: 10px;
+        left: 10px;
+        z-index: 10;
+        background: rgba(30, 30, 30, 0.85);
+        color: #fff;
+        padding: 12px 16px;
+        border-radius: 8px;
+        font-family: sans-serif;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+      }
+      #ui input {
+        width: 150px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="ui">
+      <button id="simulateBtn" class="btn btn-secondary btn-sm mb-1">
+        Simulate
+      </button>
+      <button id="switchFreqBtn" class="btn btn-secondary btn-sm mb-1">
+        Switch frequencies
+      </button>
+      <button id="restartBleBtn" class="btn btn-secondary btn-sm mb-1">
+        Restart BLE
+      </button>
+      <button onclick="toggleRendering()" class="btn btn-secondary btn-sm mb-1">
+        Toggle Rendering
+      </button>
+      <div class="mt-2">
+        <input
+          id="manualInput"
+          class="form-control form-control-sm d-inline-block"
+          style="width: 150px"
+          placeholder="UP/DOWN/LEFT/RIGHT or (x,y,z)"
+        />
+        <button id="sendManual" class="btn btn-secondary btn-sm ms-1">
+          Send
+        </button>
+      </div>
+      <div id="lastCmd" class="mt-2">Input: —</div>
+      <div id="log"></div>
+    </div>
+
+    <!-- Shaders -->
+    <script id="vert" type="x-shader/x-vertex">
+      attribute vec3 aPosition;
+      varying vec2 vPos;
+      void main() {
+        vPos = aPosition.xy;
+        gl_Position = vec4(aPosition, 1.0);
+      }
+    </script>
+
+    <script id="frag" type="x-shader/x-fragment">
+      precision highp float;
+
+      uniform vec2 uResolution;
+      uniform float uSliceDepth;   // 0..1 normalized slice depth
+      uniform float uScanX;        // scan position along X (world units or normalized)
+      uniform float uTime;         // for subtle animation
+      uniform bool uSharpMode;     // reuse your toggle if you want higher contrast
+
+      // Hash/Noise utilities
+      float hash(vec2 p) {
+        return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+      }
+      float noise(vec2 p) {
+        vec2 i = floor(p);
+        vec2 f = fract(p);
+        float a = hash(i);
+        float b = hash(i + vec2(1.0, 0.0));
+        float c = hash(i + vec2(0.0, 1.0));
+        float d = hash(i + vec2(1.0, 1.0));
+        vec2 u = f * f * (3.0 - 2.0 * f);
+        return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
+      }
+
+      // Hyperbola model: y = a(x - h)^2 + k mapped into normalized 0..1 space
+      float hyperbolaResponse(float xNorm, float yNorm, float h, float k, float a, float width) {
+        // Expected depth position at this x:
+        float yExpected = a * (xNorm - h) * (xNorm - h) + k;
+        float d = abs(yNorm - yExpected);
+        float falloff = smoothstep(width, 0.0, d); // bright near curve
+        return falloff;
+      }
+
+      void main() {
+        vec2 uv = gl_FragCoord.xy / uResolution; // 0..1
+        float x = uv.x;
+        float y = uv.y;
+
+        // Base: layered bands
+        float bandsFreq = uSharpMode ? 80.0 : 50.0;
+        float bands = 0.35 + 0.25 * sin((y * bandsFreq) + 2.0 * noise(vec2(x * 4.0, y * 4.0)));
+
+        // Speckle
+        float grain = (hash(gl_FragCoord.xy + uTime * 60.0) - 0.5) * 0.15;
+
+        // Multiple synthetic hyperbolas (objects). We parameterize their apex along x by uScanX.
+        float objects = 0.0;
+        // You can vary count for richness
+        const int COUNT = 6;
+        for (int i = 0; i < COUNT; i++) {
+          float fi = float(i);
+          // Object “center” along x, modulated by uScanX to simulate motion across grid
+          float hx = 0.15 + fi * 0.13 + uScanX * 0.5  ;
+          // Apex depth
+          float k = 0.15 + fract(fi * 0.31) * 0.6;
+          // Curvature
+          float a = mix(0.08, 0.25, fract(fi * 0.77));
+          // Width tolerance (how thick/bright the curve appears)
+          float width = mix(0.02, 0.05, fract(fi * 0.41));
+          objects += hyperbolaResponse(x, y, hx, k, a, width);
+        }
+
+        // Depth slice emphasis: brighten features near uSliceDepth
+        float sliceWindow = 0.08; // how thick the slice picks up features
+        float sliceMask = smoothstep(sliceWindow, 0.0, abs(y - uSliceDepth));
+
+        // Combine
+        float signal = max(objects, bands) + grain;
+
+        // Contrast and clamp
+        signal = (signal - 0.4) * (uSharpMode ? 2.2 : 1.6) + 0.5;
+        signal = clamp(signal, 0.0, 1.0);
+
+        // Grayscale palette
+        vec3 color = mix(vec3(0.06), vec3(0.90), signal);
+        gl_FragColor = vec4(color, 1.0);
+      }
+    </script>
+
+    <script>
+      // --- Electron IPC ---
+      let ipcRenderer;
+      try {
+        ipcRenderer = require("electron").ipcRenderer;
+      } catch (e) {}
+      if (ipcRenderer) {
+        ipcRenderer.on("command", (event, cmd) => handleCommand(cmd));
+        ipcRenderer.on("vectorCommand", (event, vec) => {
+          if (Array.isArray(vec) && vec.length >= 2) {
+            handleCommand(`(${vec[0]}, 0, ${vec[1]})`);
+          } else if (typeof vec === "string") {
+            handleCommand(vec);
+          } else if (
+            vec &&
+            typeof vec === "object" &&
+            "x" in vec &&
+            "z" in vec
+          ) {
+            handleCommand(`(${vec.x}, 0, ${vec.z})`);
+          }
+        });
+      }
+      document.getElementById("restartBleBtn").onclick = () => {
+        ipcRenderer && ipcRenderer.send("restartBleProcess");
+      };
+
+      // --- UI logging ---
+      function log(msg) {
+        const el = document.createElement("div");
+        el.textContent = msg;
+        document.getElementById("log").prepend(el);
+      }
+
+      // --- Screen mode scaling (kept from your UI) ---
+      let offsetMul = 0.5;
+      function setScreen(type) {
+        if (type === "monitor") offsetMul = 1;
+        else if (type === "computer") offsetMul = 0.5;
+      }
+      setScreen("monitor");
+
+      // --- Command handling (kept: UP/DOWN/LEFT/RIGHT and (x,y,z)) ---
+      let lastDx = 0,
+        lastDz = 0;
+      function handleCommand(cmd) {
+        if (!cmd) return;
+        document.getElementById("lastCmd").textContent = "Last: " + cmd;
+        let dx = 0,
+          dz = 0;
+        const tupleMatch = cmd
+          .toString()
+          .match(
+            /^\(?\s*(-?\d*\.?\d+)\s*,\s*(-?\d*\.?\d+)\s*,\s*(-?\d*\.?\d+)\s*\)?$/
+          );
+        if (tupleMatch) {
+          dx = parseFloat(tupleMatch[1]);
+          dz = parseFloat(tupleMatch[3]);
+        } else {
+          const s = cmd.toString().trim().toUpperCase();
+          const map = {
+            UP: [0, 1],
+            DOWN: [0, -1],
+            LEFT: [-1, 0],
+            RIGHT: [1, 0],
+          };
+          if (map[s]) [dx, dz] = map[s];
+          else return;
+        }
+        lastDx = Math.max(-1, Math.min(1, dx));
+        lastDz = -Math.max(-1, Math.min(1, dz));
+      }
+
+      document.getElementById("simulateBtn").onclick = () => {
+        const cmds = ["UP", "DOWN", "LEFT", "RIGHT", "(0,1,0)", "(0,-1,0)"];
+        handleCommand(cmds[Math.floor(Math.random() * cmds.length)]);
+      };
+      document.getElementById("sendManual").onclick = () => {
+        const val = document.getElementById("manualInput").value.trim();
+        if (val) handleCommand(val);
+        document.getElementById("manualInput").value = "";
+      };
+
+      // --- Arrow keys control GPU slice-plane ---
+      // Left/Right -> uScanX, Up/Down -> uSliceDepth
+      window.addEventListener("keydown", function (e) {
+        if (e.key === "ArrowLeft") ((lastDx = -1), (lastDz = 0));
+        if (e.key === "ArrowRight") ((lastDx = 1), (lastDz = 0));
+        if (e.key === "ArrowUp") ((lastDx = 0), (lastDz = 1));
+        if (e.key === "ArrowDown") ((lastDx = 0), (lastDz = -1));
+
+        if (e.key === "x" || e.key === "X") {
+          // optional reset
+          uScanX = 0.0;
+          uSliceDepth = 0.5;
+        }
+        if (e.key === "m") switchFreqs();
+        if (e.key === "g") toggleRendering();
+      });
+      window.addEventListener("keyup", function (e) {
+        if (
+          ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)
+        ) {
+          lastDx = 0;
+          lastDz = 0;
+        }
+      });
+
+      // --- p5 sketch with GPU shader slice-plane ---
+      let terrainShader;
+      let useSharpNoise = false; // reuse your toggle button
+      let rendering = true;
+
+      function toggleRendering() {
+        rendering = !rendering;
+      }
+      function switchFreqs() {
+        useSharpNoise = !useSharpNoise;
+        console.log(
+          "Switched to " + (useSharpNoise ? "high" : "low") + " contrast"
+        );
+        const btn = document.getElementById("switchFreqBtn");
+        if (btn)
+          btn.textContent = useSharpNoise
+            ? "Switch to low frequency"
+            : "Switch to high frequency";
+      }
+
+      // Slice-plane uniforms
+      let uScanX = 0.0; // 0..1
+      let uSliceDepth = 0.5; // 0..1
+      let lastTime = performance.now();
+
+      // Map your joystick-like dx/dz to slice-plane controls at a fixed interval
+      const step = 0.01;
+      setInterval(() => {
+        // Horizontal movement (Left/Right) affects uScanX
+        if (lastDx !== 0) {
+          uScanX += step * lastDx;
+        }
+        // Vertical movement (Up/Down) affects uSliceDepth
+        if (lastDz !== 0) {
+          uSliceDepth = Math.min(
+            1.0,
+            Math.max(0.0, uSliceDepth + step * lastDz)
+          );
+        }
+      }, 10);
+
+      let font;
+      let sketch = (p) => {
+        p.preload = function () {
+          font = p.loadFont("assets/proximanova_regular.ttf");
+        };
+        p.setup = function () {
+          p.createCanvas(p.windowWidth, p.windowHeight, p.WEBGL);
+          terrainShader = p.createShader(
+            document.getElementById("vert").textContent,
+            // Replace your frag in the DOM with the GPU slice-plane frag provided earlier
+            document.getElementById("frag").textContent
+          );
+          p.noStroke();
+          p.textFont(font);
+
+          // Button event for switching contrast
+          document.getElementById("switchFreqBtn").onclick = function () {
+            switchFreqs();
+          };
+        };
+
+        p.draw = function () {
+          p.background(0);
+
+          let now = performance.now();
+          let dt = (now - lastTime) / 1000;
+          lastTime = now;
+
+          if (rendering) {
+            p.shader(terrainShader);
+            terrainShader.setUniform("uResolution", [p.width, p.height]);
+            terrainShader.setUniform("uSliceDepth", uSliceDepth);
+            terrainShader.setUniform("uScanX", uScanX);
+            terrainShader.setUniform("uTime", now * 0.001);
+            terrainShader.setUniform("uSharpMode", useSharpNoise);
+
+            // Fullscreen quad
+            p.beginShape(p.TRIANGLE_STRIP);
+            p.vertex(-1, -1, 0);
+            p.vertex(1, -1, 0);
+            p.vertex(-1, 1, 0);
+            p.vertex(1, 1, 0);
+            p.endShape();
+            p.resetShader();
+          }
+
+          // Overlay UI info
+          p.resetMatrix();
+          p.ortho();
+          p.translate(-p.width / 2, -p.height / 2);
+          p.push();
+          p.drawingContext.disable(p.drawingContext.DEPTH_TEST);
+          p.fill(255);
+          p.textSize(12);
+          p.text(
+            `ScanX: ${uScanX.toFixed(2)}  SliceDepth: ${uSliceDepth.toFixed(2)}`,
+            10,
+            20
+          );
+          p.drawingContext.enable(p.drawingContext.DEPTH_TEST);
+          p.pop();
+        };
+
+        p.windowResized = function () {
+          p.resizeCanvas(p.windowWidth, p.windowHeight);
+        };
+      };
+
+      window._pInst = new p5(sketch);
+    </script>
+  </body>
+</html>
