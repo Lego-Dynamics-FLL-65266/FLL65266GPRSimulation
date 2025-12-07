@@ -99,9 +99,9 @@
 
       uniform vec2 uResolution;
       uniform float uSliceDepth;   // 0..1 normalized slice depth
-      uniform float uScanX;        // scan position along X (world units or normalized)
+      uniform float uScanX;        // scan position along X
       uniform float uTime;         // for subtle animation
-      uniform bool uSharpMode;     // reuse your toggle if you want higher contrast
+      uniform bool uSharpMode;     // toggle for higher contrast
 
       // Hash/Noise utilities
       float hash(vec2 p) {
@@ -118,12 +118,12 @@
         return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
       }
 
-      // Hyperbola model: y = a(x - h)^2 + k mapped into normalized 0..1 space
+      // Hyperbola model: downward opening parabola
       float hyperbolaResponse(float xNorm, float yNorm, float h, float k, float a, float width) {
-        // Expected depth position at this x:
-        float yExpected = a * (xNorm - h) * (xNorm - h) + k;
+        float yExpected = -a * (xNorm - h) * (xNorm - h) + k; // downward
         float d = abs(yNorm - yExpected);
-        float falloff = smoothstep(width, 0.0, d); // bright near curve
+        // sharper falloff than smoothstep
+        float falloff = 1.0 / (1.0 + pow(d / width, 8.0));
         return falloff;
       }
 
@@ -132,36 +132,33 @@
         float x = uv.x;
         float y = uv.y;
 
-        // Base: layered bands
+        // Base: layered bands (optional, keep subtle)
         float bandsFreq = uSharpMode ? 80.0 : 50.0;
-        float bands = 0.35 + 0.25 * sin((y * bandsFreq) + 2.0 * noise(vec2(x * 4.0, y * 4.0)));
+        float bands = 0.35 + 0.15 * sin((y * bandsFreq) + 2.0 * noise(vec2(x * 4.0, y * 4.0)));
 
         // Speckle
         float grain = (hash(gl_FragCoord.xy + uTime * 60.0) - 0.5) * 0.15;
 
-        // Multiple synthetic hyperbolas (objects). We parameterize their apex along x by uScanX.
+        // Multiple synthetic hyperbolas
         float objects = 0.0;
-        // You can vary count for richness
-        const int COUNT = 6;
+        const int COUNT = 20; // more hyperbolas
         for (int i = 0; i < COUNT; i++) {
           float fi = float(i);
-          // Object “center” along x, modulated by uScanX to simulate motion across grid
-          float hx = 0.15 + fi * 0.13 + uScanX * 0.5  ;
-          // Apex depth
-          float k = 0.15 + fract(fi * 0.31) * 0.6;
-          // Curvature
-          float a = mix(0.08, 0.25, fract(fi * 0.77));
-          // Width tolerance (how thick/bright the curve appears)
-          float width = mix(0.02, 0.05, fract(fi * 0.41));
-          objects += hyperbolaResponse(x, y, hx, k, a, width);
+          float hx = fract(fi * 0.05 + uScanX);
+          float k  = 0.8 - fract(fi * 0.37) * 0.6; // apex depth higher up
+          float a  = mix(0.5, 1.0, fract(fi * 0.77)); // stronger curvature
+          float width = mix(0.01, 0.03, fract(fi * 0.41));
+          float falloff = hyperbolaResponse(x, y, hx, k, a, width);
+          // keep only strongest hyperbola at this pixel
+          objects = max(objects, falloff);
         }
 
-        // Depth slice emphasis: brighten features near uSliceDepth
-        float sliceWindow = 0.08; // how thick the slice picks up features
+        // Depth slice emphasis
+        float sliceWindow = 0.08;
         float sliceMask = smoothstep(sliceWindow, 0.0, abs(y - uSliceDepth));
 
         // Combine
-        float signal = max(objects, bands) + grain;
+        float signal = objects * sliceMask + grain;
 
         // Contrast and clamp
         signal = (signal - 0.4) * (uSharpMode ? 2.2 : 1.6) + 0.5;
