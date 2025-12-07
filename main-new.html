@@ -97,13 +97,13 @@
     <script id="frag" type="x-shader/x-fragment">
       precision highp float;
 
-      uniform vec2 uResolution;
-      uniform float uSliceDepth;   // 0..1 normalized slice depth
-      uniform float uScanX;        // scan position along X
-      uniform float uTime;         // for subtle animation
-      uniform bool uSharpMode;     // toggle for higher contrast
+      uniform vec2 uResolution;   // (width, height) in pixels
+      uniform float uSliceDepth;  // 0..1 lateral slice position s
+      uniform float uScanX;       // normalized horizontal scan offset 0..1 (scaled below)
+      uniform float uTime;
+      uniform bool uSharpMode;
 
-      // Hash/Noise utilities
+      // ------------------------ Utilities ------------------------
       float hash(vec2 p) {
         return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
       }
@@ -118,53 +118,86 @@
         return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
       }
 
-      // Hyperbola model: downward opening parabola
-      float hyperbolaResponse(float xNorm, float yNorm, float h, float k, float a, float width) {
-        float yExpected = -a * (xNorm - h) * (xNorm - h) + k; // downward
-        float d = abs(yNorm - yExpected);
-        // sharper falloff than smoothstep
-        float falloff = 1.0 / (1.0 + pow(d / width, 8.0));
-        return falloff;
+      // Paraboloid slice response in pixel space:
+      // z(x, s) = dPx + aPx*(x - hPx)^2 + bPx*(sPx - kPx)^2
+      float paraboloidSliceResponsePx(
+        float xPx,    // screen x in pixels
+        float yPx,    // screen y in pixels (depth)
+        float sPx,    // lateral slice coordinate in pixels
+        float hPx,    // apex x in pixels
+        float kPx,    // apex lateral position in pixels
+        float dPx,    // apex depth (z) in pixels
+        float aPx,    // curvature along x (pixels^-1)
+        float bPx,    // curvature along slice (pixels^-1)
+        float widthPx // thickness in pixels
+      ) {
+        float zPx = dPx + aPx * (xPx - hPx) * (xPx - hPx)
+                          + bPx * (sPx - kPx) * (sPx - kPx);
+        float d = abs(yPx - zPx);
+        return 1.0 / (1.0 + pow(d / widthPx, 8.0));
       }
 
       void main() {
-        vec2 uv = gl_FragCoord.xy / uResolution; // 0..1
-        float x = uv.x;
-        float y = uv.y;
+        // Pixel-space coords
+        float xPx = gl_FragCoord.x;
+        float yPx = gl_FragCoord.y;
+        vec2 uv = gl_FragCoord.xy / uResolution;
 
-        // Base: layered bands (optional, keep subtle)
+        // Lateral slice axis scaling: map uSliceDepth (0..1) to a meaningful pixel range.
+        // Increase sScalePx if you want slice to have a stronger effect on width/visibility.
+        float sScalePx = 0.6 * uResolution.x;       // lateral axis spans ~60% of screen width
+        float sPx      = uSliceDepth * sScalePx;     // current slice position in pixels
+
+        // Background bands (subtle, non-occluding)
         float bandsFreq = uSharpMode ? 80.0 : 50.0;
-        float bands = 0.35 + 0.15 * sin((y * bandsFreq) + 2.0 * noise(vec2(x * 4.0, y * 4.0)));
+        float bands = 0.12 * sin(uv.y * bandsFreq + noise(vec2(uv.x * 4.0, uv.y * 4.0)) * 6.0);
 
         // Speckle
-        float grain = (hash(gl_FragCoord.xy + uTime * 60.0) - 0.5) * 0.15;
+        float grain = (hash(gl_FragCoord.xy + uTime * 60.0) - 0.5) * 0.10;
 
-        // Multiple synthetic hyperbolas
+        // Accumulate strongest reflector
         float objects = 0.0;
-        const int COUNT = 20; // more hyperbolas
+
+        // Movement scale: make uScanX (0..1) span the full width in pixels
+        float scanPx = uScanX * uResolution.x;
+
+        // Targets
+        const int COUNT = 18;
         for (int i = 0; i < COUNT; i++) {
           float fi = float(i);
-          float hx = fract(fi * 0.05 + uScanX);
-          float k  = 0.8 - fract(fi * 0.37) * 0.6; // apex depth higher up
-          float a  = mix(0.5, 1.0, fract(fi * 0.77)); // stronger curvature
-          float width = mix(0.01, 0.03, fract(fi * 0.41));
-          float falloff = hyperbolaResponse(x, y, hx, k, a, width);
-          // keep only strongest hyperbola at this pixel
+
+          // Apex x in pixels: base spacing + unbounded offset via scanPx
+          float hPx = 80.0 + fi * 70.0 + scanPx;
+
+          // Apex depth (vertex) in pixels
+          float dPx = mix(0.15, 0.85, fract(fi * 0.37)) * uResolution.y;
+
+          // Apex lateral k in pixels (must be in same units as sPx)
+          float kPx = (0.2 + fract(fi * 0.19 + 0.37) * 0.6) * sScalePx;
+
+          // Curvature along x (pixels^-1): increase for tighter downward opening
+          float aPx = mix(0.0010, 0.0030, fract(fi * 0.77));
+
+          // Curvature along slice (pixels^-1): controls how slice changes width/visibility
+          float bPx = mix(0.0008, 0.0035, fract(fi * 0.53));
+
+          // Curve thickness (pixels)
+          float widthPx = mix(2.0, 5.0, fract(fi * 0.41));
+
+          // Downward opening achieved because z increases with squared distance
+          float falloff = paraboloidSliceResponsePx(xPx, yPx, sPx, hPx, kPx, dPx, aPx, bPx, widthPx);
+
+          // Keep strongest (prevents intersection smearing)
           objects = max(objects, falloff);
         }
 
-        // Depth slice emphasis
-        float sliceWindow = 0.08;
-        float sliceMask = smoothstep(sliceWindow, 0.0, abs(y - uSliceDepth));
+        // Compose
+        float signal = max(objects, bands) + grain;
 
-        // Combine
-        float signal = objects * sliceMask + grain;
-
-        // Contrast and clamp
-        signal = (signal - 0.4) * (uSharpMode ? 2.2 : 1.6) + 0.5;
+        // Contrast
+        signal = (signal - 0.4) * (uSharpMode ? 2.25 : 1.7) + 0.5;
         signal = clamp(signal, 0.0, 1.0);
 
-        // Grayscale palette
         vec3 color = mix(vec3(0.06), vec3(0.90), signal);
         gl_FragColor = vec4(color, 1.0);
       }
