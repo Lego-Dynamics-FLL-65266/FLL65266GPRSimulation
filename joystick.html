@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
   <head>
     <meta charset="utf-8" />
@@ -184,7 +184,7 @@
       const sketch = (p) => {
         p.preload = () => {
           // GPU: WEBGL renderer will handle geometry on GPU
-          droneModel = p.loadModel("drone.stl", true); // normalize to unit box
+          droneModel = p.loadModel("deps/drone.stl", true); // normalize to unit box
         };
 
         p.setup = () => {

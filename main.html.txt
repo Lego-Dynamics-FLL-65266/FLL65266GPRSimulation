@@ -212,7 +212,6 @@
     </script>
 
     <script>
-      let offsetMulCity = 0.861;
       // --- Electron IPC ---
       let ipcRenderer;
 
@@ -246,15 +245,14 @@
         el.textContent = msg;
         document.getElementById("log").prepend(el);
       }
-      let offsetMul = 0.5;
+      let offsetMul = 0.861 / 2;
       function setScreen(type) {
         if (type == "monitor") {
-          offsetMul = 1;
+          offsetMul = 0.861;
         } else if (type == "computer") {
-          offsetMul = 0.5;
+          offsetMul = 0.861 / 2;
         }
       }
-      setScreen("monitor");
       // Serial functionality removed
 
       // --- Pan and Zoom State ---
@@ -443,7 +441,6 @@
           p.vertex(1, 1, 0);
           p.endShape();
           p.resetShader();
-
           // Overlay city GPR scan image and effects ABOVE the noise, but moving with world offset
           let img, loaded;
           if (useSharpNoise) {
@@ -453,7 +450,7 @@
             img = cityOverlayImg;
             loaded = cityOverlayLoaded;
           }
-          if (loaded && img && img.width > 0 && img.height > 0 && rendering) {
+          if (loaded && img && img.width > 0 && img.height > 0) {
             let imgW = 2048;
             let imgH = 3072;
             if (useSharpNoise) {
@@ -462,12 +459,8 @@
             }
             // Calculate screen position so overlay moves with noise
 
-            let screenX =
-              p.width / 2 -
-              (offsetX * offsetMul * offsetMulCity) / baseNoiseScale;
-            let screenY =
-              p.height / 2 +
-              (offsetZ * offsetMul * offsetMulCity) / baseNoiseScale;
+            let screenX = p.width / 2 - (offsetX * offsetMul) / baseNoiseScale;
+            let screenY = p.height / 2 + (offsetZ * offsetMul) / baseNoiseScale;
             screenX += 2000;
             p.resetMatrix();
             p.ortho();
@@ -497,6 +490,7 @@
             p.text("city-overlay.png not loaded", 40, 60);
             p.pop();
           }
+
           // --- GPR Glitch Effects ---
           p.resetMatrix();
           p.ortho();
@@ -570,6 +564,48 @@
             }
           }
 
+          // --- Parabola GPR scan features (draw last, bold color) ---
+          // Parameters for parabolas
+          const parabolaCount = 8;
+          const screenW = p.width;
+          const screenH = p.height;
+          const minWidth = screenW / (parabolaCount + 2);
+          const maxWidth = screenW / parabolaCount;
+          const minDepth = screenH * 0.18;
+          const maxDepth = screenH * 0.32;
+          // Parabolas will be generated so each touches the next at the base
+          let parabolaBases = [];
+          let x0 = 0;
+          for (let i = 0; i < parabolaCount; i++) {
+            let width = p.lerp(minWidth, maxWidth, 0.5); // fixed width for visibility
+            let depth = p.lerp(minDepth, maxDepth, 0.7); // fixed depth for visibility
+            let x1 = x0 + width;
+            parabolaBases.push({ x0, x1, depth });
+            x0 = x1;
+          }
+          // Pan parabolas with offsetX
+          let panX = offsetX * 2.5;
+          let panY = offsetZ * 1.5;
+          // Draw parabolas (draw last, above overlays)
+          p.push();
+          p.stroke(0, 255, 255, 255); // bright cyan
+          p.strokeWeight(6);
+          p.noFill();
+          for (let i = 0; i < parabolaBases.length; i++) {
+            let { x0, x1, depth } = parabolaBases[i];
+            // Parabola: y = -a(x - h)^2 + k, where a > 0 for downward opening
+            let h = (x0 + x1) / 2 + panX; // center, panned
+            let k = screenH * 0.45 + panY; // vertical position, panned
+            let a = depth / Math.pow((x1 - x0) / 2, 2); // scale so max depth at base
+            p.beginShape();
+            for (let x = x0; x <= x1; x += 2) {
+              let y = -a * Math.pow(x - h, 2) + k;
+              p.vertex(x, y);
+            }
+            p.endShape();
+          }
+          p.pop();
+
           // UI text overlay
           p.push();
           p.fill(255);
@@ -580,38 +616,8 @@
             20
           );
           p.pop();
-
-          // --- Parabola GPR scan features ---
-          p.push();
-          p.resetMatrix();
-          p.ortho();
-          p.translate(-p.width / 2, -p.height / 2);
-
-          p.drawingContext.disable(p.drawingContext.DEPTH_TEST);
-
-          p.stroke(0, 255, 255);
-          p.strokeWeight(4);
-          p.noFill();
-
-          // Parabola center and vertical position affected by offsetX and offsetZ
-          const parabolaWidth = 300;
-          const h = p.width / 2 + -offsetX * 140 * offsetMul; // center x, panned
-          const k = p.height / 2 + offsetZ * 140 * offsetMul; // center y, panned
-          const a = 0.2; // negative for downward, positive for upward
-          p.beginShape();
-          for (
-            let x = h - parabolaWidth / 2;
-            x <= h + parabolaWidth / 2;
-            x += 2
-          ) {
-            let y = a * Math.pow(x - h, 2) + k;
-            p.vertex(x, y);
-          }
-          p.endShape();
-
-          p.drawingContext.enable(p.drawingContext.DEPTH_TEST);
-          p.pop();
         };
+
         p.windowResized = function () {
           p.resizeCanvas(p.windowWidth, p.windowHeight);
         };
