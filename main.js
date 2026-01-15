@@ -6,25 +6,14 @@ function createWindows() {
   visualizerWindow = new BrowserWindow({
     width: 1000,
     height: 700,
+    fullscreen: true,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       nodeIntegration: true,
       contextIsolation: false,
     },
   });
-
-  joystickWindow = new BrowserWindow({
-    width: 800,
-    height: 400,
-    webPreferences: {
-      preload: path.join(__dirname, "preload.js"),
-      nodeIntegration: true,
-      contextIsolation: false,
-    },
-  });
-
   visualizerWindow.loadFile("main.html");
-  joystickWindow.loadFile("joystick.html");
   // When any window is closed, quit the app.
   // Use 'closed' event to allow cleanup of child processes and avoid
   // sending to destroyed webContents.
@@ -44,7 +33,6 @@ function createWindows() {
   }
 
   visualizerWindow.on("closed", onAnyWindowClosed);
-  joystickWindow.on("closed", onAnyWindowClosed);
 }
 let bleProcess;
 let currentPosition = { x: 0, z: 0 };

@@ -27,92 +27,93 @@
 -->
 <!doctype html>
 <html>
-  <head>
-    <meta charset="utf-8" />
-    <title>Simulation</title>
-    <link
-      href="deps/bootstrap.min.css"
-      rel="stylesheet"
-      integrity="sha384-EVSTQN3/azprG1Anm3QDgpJLIm9Nao0Yz1ztcQTwFspd3yD65VohhpuuCOmLASjC"
-      crossorigin="anonymous"
-    />
-    <script
-      src="deps/bootstrap.bundle.min.js"
-      integrity="sha384-MrcW6ZMFYlzcLA8Nl+NtUVF0sA7MsXsP1UyJoMp4YLEuNSfAP+JcXn/tWtIaxVXM"
-      crossorigin="anonymous"
-    ></script>
-    <script src="deps/p5.min.js"></script>
-    <script src="deps/p5.dom.min.js"></script>
 
-    <style>
-      html,
-      body,
-      canvas {
-        margin: 0;
-        padding: 0;
-        width: 100vw;
-        height: 100vh;
-        overflow: hidden;
-        box-sizing: border-box;
-      }
-      canvas {
-        position: fixed !important;
-        top: 0 !important;
-        left: 0 !important;
-        width: 100vw !important;
-        height: 100vh !important;
-        z-index: 0 !important;
-        display: block !important;
-        background: black;
-      }
-      #ui {
-        position: fixed;
-        top: 10px;
-        left: 10px;
-        z-index: 10;
-        background: rgba(30, 30, 30, 0.85);
-        color: #fff;
-        padding: 12px 16px;
-        border-radius: 8px;
-        font-family: sans-serif;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-      }
-      #ui input {
-        width: 150px;
-      }
-    </style>
-  </head>
-  <body>
-    <div id="ui">
-      <button id="simulateBtn" class="btn btn-secondary btn-sm mb-1">
-        Simulate
+<head>
+  <meta charset="utf-8" />
+  <title>Simulation</title>
+  <link href="deps/bootstrap.min.css" rel="stylesheet"
+    integrity="sha384-EVSTQN3/azprG1Anm3QDgpJLIm9Nao0Yz1ztcQTwFspd3yD65VohhpuuCOmLASjC" crossorigin="anonymous" />
+  <script src="deps/bootstrap.bundle.min.js"
+    integrity="sha384-MrcW6ZMFYlzcLA8Nl+NtUVF0sA7MsXsP1UyJoMp4YLEuNSfAP+JcXn/tWtIaxVXM"
+    crossorigin="anonymous"></script>
+  <script src="deps/p5.min.js"></script>
+  <script src="deps/p5.dom.min.js"></script>
+
+  <style>
+    html,
+    body,
+    canvas {
+      margin: 0;
+      padding: 0;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      box-sizing: border-box;
+    }
+
+    canvas {
+      position: fixed !important;
+      top: 0 !important;
+      left: 0 !important;
+      width: 100vw !important;
+      height: 100vh !important;
+      z-index: 0 !important;
+      display: block !important;
+      background: black;
+    }
+
+    #ui {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      z-index: 10;
+      background: rgba(30, 30, 30, 0.85);
+      color: #fff;
+      padding: 12px 16px;
+      border-radius: 8px;
+      font-family: sans-serif;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    }
+
+    #ui input {
+      width: 150px;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="ui">
+    <button id="simulateBtn" class="btn btn-secondary btn-sm mb-1">
+      Simulate
+    </button>
+    <button id="switchFreqBtn" class="btn btn-secondary btn-sm mb-1">
+      Switch frequencies
+    </button>
+    <button id="restartBleBtn" class="btn btn-secondary btn-sm mb-1">
+      Restart BLE
+    </button>
+    <button onclick="toggleRendering()" class="btn btn-secondary btn-sm mb-1">
+      Toggle Rendering
+    </button>
+    <div class="mt-2">
+      <input id="manualInput" class="form-control form-control-sm d-inline-block" style="width: 150px"
+        placeholder="UP/DOWN/LEFT/RIGHT or (x,y,z)" />
+      <button id="sendManual" class="btn btn-secondary btn-sm ms-1">
+        Send
       </button>
-      <button id="switchFreqBtn" class="btn btn-secondary btn-sm mb-1">
-        Switch frequencies
-      </button>
-      <button id="restartBleBtn" class="btn btn-secondary btn-sm mb-1">
-        Restart BLE
-      </button>
-      <button onclick="toggleRendering()" class="btn btn-secondary btn-sm mb-1">
-        Toggle Rendering
-      </button>
-      <div class="mt-2">
-        <input
-          id="manualInput"
-          class="form-control form-control-sm d-inline-block"
-          style="width: 150px"
-          placeholder="UP/DOWN/LEFT/RIGHT or (x,y,z)"
-        />
-        <button id="sendManual" class="btn btn-secondary btn-sm ms-1">
-          Send
-        </button>
-      </div>
-      <div id="lastCmd" class="mt-2">Input: —</div>
-      <div id="log"></div>
     </div>
-
-    <!-- Shaders -->
-    <script id="vert" type="x-shader/x-vertex">
+    <div id="lastCmd" class="mt-2">Input: —</div>
+    <div id="log"></div>
+  </div>
+  <script>
+    window.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") {
+        window.close();
+      }
+    });
+  </script>
+  <!-- Shaders -->
+  <script id="vert" type="x-shader/x-vertex">
       attribute vec3 aPosition;
       varying vec2 vPos;
       void main() {
@@ -121,7 +122,7 @@
       }
     </script>
 
-    <script id="frag" type="x-shader/x-fragment">
+  <script id="frag" type="x-shader/x-fragment">
           precision highp float;
           uniform float uOffsetX;
           uniform float uOffsetY;
@@ -211,415 +212,415 @@
           }
     </script>
 
-    <script>
-      let offsetMulCity = 0.861;
-      // --- Electron IPC ---
-      let ipcRenderer;
+  <script>
+    let offsetMulCity = 0.861;
+    // --- Electron IPC ---
+    let ipcRenderer;
 
-      try {
-        ipcRenderer = require("electron").ipcRenderer;
-      } catch (e) {}
-      if (ipcRenderer) {
-        ipcRenderer.on("command", (event, cmd) => handleCommand(cmd));
-        ipcRenderer.on("vectorCommand", (event, vec) => {
-          // Accept {x, z} or array [x, z] or string
-          if (Array.isArray(vec) && vec.length >= 2) {
-            handleCommand(`(${vec[0]}, 0, ${vec[1]})`);
-          } else if (typeof vec === "string") {
-            handleCommand(vec);
-          } else if (
-            vec &&
-            typeof vec === "object" &&
-            "x" in vec &&
-            "z" in vec
-          ) {
-            handleCommand(`(${vec.x}, 0, ${vec.z})`);
-          }
-        });
-      }
-      document.getElementById("restartBleBtn").onclick = () => {
-        ipcRenderer.send("restartBleProcess");
-      };
-      // --- UI Logging ---
-      function log(msg) {
-        const el = document.createElement("div");
-        el.textContent = msg;
-        document.getElementById("log").prepend(el);
-      }
-      let offsetMul = 0.5;
-      function setScreen(type) {
-        if (type == "monitor") {
-          offsetMul = 1;
-        } else if (type == "computer") {
-          offsetMul = 0.5;
-        }
-      }
-      setScreen("monitor");
-      // Serial functionality removed
-
-      // --- Pan and Zoom State ---
-      let baseNoiseScale = 0.006;
-      const panSpeed = 80;
-      let panStep = panSpeed * baseNoiseScale;
-      // Zoom functionality removed
-
-      let offsetX = 0,
-        offsetZ = 0;
-      let targetOffsetX = 0,
-        targetOffsetZ = 0;
-
-      // --- Command Handling ---
-      // Store the latest joystick dx/dz
-      let lastDx = 0,
-        lastDz = 0;
-      function handleCommand(cmd) {
-        if (!cmd) return;
-        document.getElementById("lastCmd").textContent = "Last: " + cmd;
-        console.log("Command received:", cmd);
-
-        let dx = 0,
-          dz = 0;
-        const tupleMatch = cmd
-          .toString()
-          .match(
-            /^\(?\s*(-?\d*\.?\d+)\s*,\s*(-?\d*\.?\d+)\s*,\s*(-?\d*\.?\d+)\s*\)?$/
-          );
-        if (tupleMatch) {
-          dx = parseFloat(tupleMatch[1]);
-          dz = parseFloat(tupleMatch[3]);
-        } else {
-          const s = cmd.toString().trim().toUpperCase();
-          const map = {
-            UP: [0, 1],
-            DOWN: [0, -1],
-            LEFT: [-1, 0],
-            RIGHT: [1, 0],
-          };
-          if (map[s]) [dx, dz] = map[s];
-          else return;
-        }
-
-        lastDx = Math.max(-1, Math.min(1, dx));
-        lastDz = -Math.max(-1, Math.min(1, dz));
-      }
-      window.addEventListener("keydown", function (e) {
-        if (e.key === "ArrowUp") {
-          lastDx = 0;
-          lastDz = 1;
-        }
-        if (e.key === "ArrowDown") {
-          lastDx = 0;
-          lastDz = -1;
-        }
-        if (e.key === "ArrowLeft") {
-          lastDx = -1;
-          lastDz = 0;
-        }
-        if (e.key === "ArrowRight") {
-          lastDx = 1;
-          lastDz = 0;
-        }
-      });
-
-      window.addEventListener("keyup", function (e) {
-        if (
-          ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)
+    try {
+      ipcRenderer = require("electron").ipcRenderer;
+    } catch (e) { }
+    if (ipcRenderer) {
+      ipcRenderer.on("command", (event, cmd) => handleCommand(cmd));
+      ipcRenderer.on("vectorCommand", (event, vec) => {
+        // Accept {x, z} or array [x, z] or string
+        if (Array.isArray(vec) && vec.length >= 2) {
+          handleCommand(`(${vec[0]}, 0, ${vec[1]})`);
+        } else if (typeof vec === "string") {
+          handleCommand(vec);
+        } else if (
+          vec &&
+          typeof vec === "object" &&
+          "x" in vec &&
+          "z" in vec
         ) {
-          lastDx = 0;
-          lastDz = 0;
+          handleCommand(`(${vec.x}, 0, ${vec.z})`);
         }
       });
-      // Apply pan at a fixed interval (every 100ms)
-      setInterval(() => {
-        targetOffsetX += lastDx * panStep;
-        targetOffsetZ += lastDz * panStep;
-      }, 100);
-      // --- UI Wiring ---
-      // Serial button handlers removed
-      document.getElementById("simulateBtn").onclick = () => {
-        const cmds = ["UP", "DOWN", "LEFT", "RIGHT", "(0,1,0)", "(0,-1,0)"];
-        handleCommand(cmds[Math.floor(Math.random() * cmds.length)]);
-      };
-      document.getElementById("sendManual").onclick = () => {
-        const val = document.getElementById("manualInput").value.trim();
-        if (val) handleCommand(val);
-        document.getElementById("manualInput").value = "";
-      };
-
-      window.addEventListener("keydown", function (e) {
-        if (e.key === "x" || e.key === "X") {
-          targetOffsetX = 0;
-          targetOffsetZ = 0;
-        }
-        if (e.key === "m") {
-          switchFreqs();
-        }
-        if (e.key === "g") {
-          toggleRendering();
-        }
-      });
-
-      // --- p5 Sketch ---
-      let terrainShader;
-      let useSharpNoise = false;
-      let lastTime = performance.now();
-      let cityOverlayImg, citySharpImg;
-      let cityOverlayLoaded = false,
-        citySharpLoaded = false;
-      let font;
-      function toggleRendering() {
-        rendering = !rendering;
+    }
+    document.getElementById("restartBleBtn").onclick = () => {
+      ipcRenderer.send("restartBleProcess");
+    };
+    // --- UI Logging ---
+    function log(msg) {
+      const el = document.createElement("div");
+      el.textContent = msg;
+      document.getElementById("log").prepend(el);
+    }
+    let offsetMul = 0.5;
+    function setScreen(type) {
+      if (type == "monitor") {
+        offsetMul = 1;
+      } else if (type == "computer") {
+        offsetMul = 0.5;
       }
-      function switchFreqs() {
-        useSharpNoise = !useSharpNoise;
-        if (useSharpNoise) {
-          baseNoiseScale = 0.004;
-          panStep = panSpeed * baseNoiseScale;
-        } else {
-          baseNoiseScale = 0.006;
-          panStep = panSpeed * baseNoiseScale;
-        }
-        console.log(
-          "Switched to " + (useSharpNoise ? "high" : "low") + " frequency"
+    }
+    setScreen("computer");
+
+    // --- Pan and Zoom State ---
+    let baseNoiseScale = 0.006;
+    const panSpeed = 80;
+    let panStep = panSpeed * baseNoiseScale;
+    // Zoom functionality removed
+
+    let offsetX = 0,
+      offsetZ = 0;
+    let targetOffsetX = 0,
+      targetOffsetZ = 0;
+
+    // --- Command Handling ---
+    // Store the latest joystick dx/dz
+    let lastDx = 0,
+      lastDz = 0;
+    function handleCommand(cmd) {
+      if (!cmd) return;
+      document.getElementById("lastCmd").textContent = "Last: " + cmd;
+      console.log("Command received:", cmd);
+
+      let dx = 0,
+        dz = 0;
+      const tupleMatch = cmd
+        .toString()
+        .match(
+          /^\(?\s*(-?\d*\.?\d+)\s*,\s*(-?\d*\.?\d+)\s*,\s*(-?\d*\.?\d+)\s*\)?$/
         );
+      if (tupleMatch) {
+        dx = parseFloat(tupleMatch[1]);
+        dz = parseFloat(tupleMatch[3]);
+      } else {
+        const s = cmd.toString().trim().toUpperCase();
+        const map = {
+          UP: [0, 1],
+          DOWN: [0, -1],
+          LEFT: [-1, 0],
+          RIGHT: [1, 0],
+        };
+        if (map[s]) [dx, dz] = map[s];
+        else return;
       }
 
-      let sketch = (p) => {
-        p.preload = function () {
-          cityOverlayImg = p.loadImage("assets/city-overlay.png", () => {
-            cityOverlayLoaded = true;
-          });
-          citySharpImg = p.loadImage("assets/city-sharp.png", () => {
-            citySharpLoaded = true;
-          });
-          font = p.loadFont("assets/proximanova_regular.ttf");
+      lastDx = Math.max(-1, Math.min(1, dx));
+      lastDz = -Math.max(-1, Math.min(1, dz));
+    }
+    window.addEventListener("keydown", function (e) {
+      if (e.key === "ArrowUp") {
+        lastDx = 0;
+        lastDz = 1;
+      }
+      if (e.key === "ArrowDown") {
+        lastDx = 0;
+        lastDz = -1;
+      }
+      if (e.key === "ArrowLeft") {
+        lastDx = -1;
+        lastDz = 0;
+      }
+      if (e.key === "ArrowRight") {
+        lastDx = 1;
+        lastDz = 0;
+      }
+    });
+
+    window.addEventListener("keyup", function (e) {
+      if (
+        ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)
+      ) {
+        lastDx = 0;
+        lastDz = 0;
+      }
+    });
+    // Apply pan at a fixed interval (every 100ms)
+    setInterval(() => {
+      targetOffsetX += lastDx * panStep;
+      targetOffsetZ += lastDz * panStep;
+    }, 100);
+    // --- UI Wiring ---
+    // Serial button handlers removed
+    document.getElementById("simulateBtn").onclick = () => {
+      const cmds = ["UP", "DOWN", "LEFT", "RIGHT", "(0,1,0)", "(0,-1,0)"];
+      handleCommand(cmds[Math.floor(Math.random() * cmds.length)]);
+    };
+    document.getElementById("sendManual").onclick = () => {
+      const val = document.getElementById("manualInput").value.trim();
+      if (val) handleCommand(val);
+      document.getElementById("manualInput").value = "";
+    };
+
+    window.addEventListener("keydown", function (e) {
+      if (e.key === "x" || e.key === "X") {
+        targetOffsetX = 0;
+        targetOffsetZ = 0;
+      }
+      if (e.key === "m") {
+        switchFreqs();
+      }
+      if (e.key === "g") {
+        toggleRendering();
+      }
+    });
+
+    // --- p5 Sketch ---
+    let terrainShader;
+    let useSharpNoise = false;
+    let lastTime = performance.now();
+    let cityOverlayImg, citySharpImg;
+    let cityOverlayLoaded = false,
+      citySharpLoaded = false;
+    let font;
+    function toggleRendering() {
+      rendering = !rendering;
+    }
+    function switchFreqs() {
+      useSharpNoise = !useSharpNoise;
+      if (useSharpNoise) {
+        baseNoiseScale = 0.004;
+        panStep = panSpeed * baseNoiseScale;
+      } else {
+        baseNoiseScale = 0.006;
+        panStep = panSpeed * baseNoiseScale;
+      }
+      console.log(
+        "Switched to " + (useSharpNoise ? "high" : "low") + " frequency"
+      );
+    }
+
+    let sketch = (p) => {
+      p.preload = function () {
+        cityOverlayImg = p.loadImage("assets/city-overlay.png", () => {
+          cityOverlayLoaded = true;
+        });
+        citySharpImg = p.loadImage("assets/city-sharp.png", () => {
+          citySharpLoaded = true;
+        });
+        font = p.loadFont("assets/proximanova_regular.ttf");
+        switchFreqs();
+        switchFreqs();
+      };
+      p.setup = function () {
+        p.createCanvas(p.windowWidth, p.windowHeight, p.WEBGL);
+        terrainShader = p.createShader(
+          document.getElementById("vert").textContent,
+          document.getElementById("frag").textContent
+        );
+        p.noStroke();
+        p.textFont(font);
+
+        // Button event for switching frequencies
+        document.getElementById("switchFreqBtn").onclick = function () {
           switchFreqs();
-          switchFreqs();
+          this.textContent = useSharpNoise
+            ? "Switch to low frequency"
+            : "Switch to high frequency";
         };
-        p.setup = function () {
-          p.createCanvas(p.windowWidth, p.windowHeight, p.WEBGL);
-          terrainShader = p.createShader(
-            document.getElementById("vert").textContent,
-            document.getElementById("frag").textContent
-          );
-          p.noStroke();
-          p.textFont(font);
+      };
+      rendering = true;
 
-          // Button event for switching frequencies
-          document.getElementById("switchFreqBtn").onclick = function () {
-            switchFreqs();
-            this.textContent = useSharpNoise
-              ? "Switch to low frequency"
-              : "Switch to high frequency";
-          };
-        };
-        rendering = true;
+      p.draw = function () {
+        // Use background(0) for reliable clearing in WEBGL
+        p.background(0);
 
-        p.draw = function () {
-          // Use background(0) for reliable clearing in WEBGL
-          p.background(0);
+        let now = performance.now();
+        let dt = (now - lastTime) / 1000;
+        lastTime = now;
 
-          let now = performance.now();
-          let dt = (now - lastTime) / 1000;
-          lastTime = now;
+        const panSpeed = 4.0; // units/sec
+        offsetX += (targetOffsetX - offsetX) * Math.min(panSpeed * dt, 1.0);
+        offsetZ += (targetOffsetZ - offsetZ) * Math.min(panSpeed * dt, 1.0);
 
-          const panSpeed = 4.0; // units/sec
-          offsetX += (targetOffsetX - offsetX) * Math.min(panSpeed * dt, 1.0);
-          offsetZ += (targetOffsetZ - offsetZ) * Math.min(panSpeed * dt, 1.0);
+        const effectiveNoiseScale = baseNoiseScale;
+        if (rendering) {
+          p.shader(terrainShader);
+        }
+        terrainShader.setUniform("uOffsetX", offsetX);
+        terrainShader.setUniform("uOffsetY", offsetZ);
+        terrainShader.setUniform("uNoiseScale", effectiveNoiseScale);
+        terrainShader.setUniform("uSharpMode", useSharpNoise);
 
-          const effectiveNoiseScale = baseNoiseScale;
-          if (rendering) {
-            p.shader(terrainShader);
-          }
-          terrainShader.setUniform("uOffsetX", offsetX);
-          terrainShader.setUniform("uOffsetY", offsetZ);
-          terrainShader.setUniform("uNoiseScale", effectiveNoiseScale);
-          terrainShader.setUniform("uSharpMode", useSharpNoise);
+        p.beginShape(p.TRIANGLE_STRIP);
+        p.vertex(-1, -1, 0);
+        p.vertex(1, -1, 0);
+        p.vertex(-1, 1, 0);
+        p.vertex(1, 1, 0);
+        p.endShape();
+        p.resetShader();
 
-          p.beginShape(p.TRIANGLE_STRIP);
-          p.vertex(-1, -1, 0);
-          p.vertex(1, -1, 0);
-          p.vertex(-1, 1, 0);
-          p.vertex(1, 1, 0);
-          p.endShape();
-          p.resetShader();
-
-          // Overlay city GPR scan image and effects ABOVE the noise, but moving with world offset
-          let img, loaded;
+        // Overlay city GPR scan image and effects ABOVE the noise, but moving with world offset
+        let img, loaded;
+        if (useSharpNoise) {
+          img = citySharpImg;
+          loaded = citySharpLoaded;
+        } else {
+          img = cityOverlayImg;
+          loaded = cityOverlayLoaded;
+        }
+        if (loaded && img && img.width > 0 && img.height > 0 && rendering) {
+          let imgW = 2048;
+          let imgH = 3072;
           if (useSharpNoise) {
-            img = citySharpImg;
-            loaded = citySharpLoaded;
-          } else {
-            img = cityOverlayImg;
-            loaded = cityOverlayLoaded;
+            imgW *= 1.5;
+            imgH *= 1.5;
           }
-          if (loaded && img && img.width > 0 && img.height > 0 && rendering) {
-            let imgW = 2048;
-            let imgH = 3072;
-            if (useSharpNoise) {
-              imgW *= 1.5;
-              imgH *= 1.5;
-            }
-            // Calculate screen position so overlay moves with noise
+          // Calculate screen position so overlay moves with noise
 
-            let screenX =
-              p.width / 2 -
-              (offsetX * offsetMul * offsetMulCity) / baseNoiseScale;
-            let screenY =
-              p.height / 2 +
-              (offsetZ * offsetMul * offsetMulCity) / baseNoiseScale;
-            screenX += 2000;
-            p.resetMatrix();
-            p.ortho();
-            p.push();
-            p.drawingContext.disable(p.drawingContext.DEPTH_TEST);
-
-            // draw overlay image with translucency
-            p.tint(255, 255); // 180/255 alpha for translucency
-            p.image(img, screenX - imgW / 2, screenY - imgH / 2, imgW, imgH);
-            p.tint(255, 255); // reset tint to opaque for any later drawing
-
-            // optional debug border
-            //p.noFill();
-            //p.stroke(255, 0, 0);
-            //p.rect(screenX - imgW / 2, screenY - imgH / 2, imgW, imgH);
-
-            p.drawingContext.enable(p.drawingContext.DEPTH_TEST);
-            p.pop();
-          } else if (!cityOverlayLoaded) {
-            // Show debug text if image not loaded
-            p.resetMatrix();
-            p.ortho();
-            p.push();
-            p.fill(255, 0, 0);
-            p.textSize(18);
-            p.textFont(font);
-            p.text("city-overlay.png not loaded", 40, 60);
-            p.pop();
-          }
-          // --- GPR Glitch Effects ---
+          let screenX =
+            p.width / 2 -
+            (offsetX * offsetMul * offsetMulCity) / baseNoiseScale;
+          let screenY =
+            p.height / 2 +
+            (offsetZ * offsetMul * offsetMulCity) / baseNoiseScale;
+          screenX += 2000;
           p.resetMatrix();
           p.ortho();
-          p.translate(-p.width / 2, -p.height / 2);
-          /*
-          // Horizontal glitch lines (many, subtle)
-          let glitchLineCount = 12 + Math.floor(Math.random() * 8);
-          for (let i = 0; i < glitchLineCount; i++) {
-            let y = Math.floor(Math.random() * p.height);
-            let x1 = Math.floor(Math.random() * p.width * 0.7);
-            let x2 = Math.floor(Math.random() * p.width);
-            if (x2 < x1) [x1, x2] = [x2, x1]; // ensure left-to-right
+          p.push();
+          p.drawingContext.disable(p.drawingContext.DEPTH_TEST);
+
+          // draw overlay image with translucency
+          p.tint(255, 255); // 180/255 alpha for translucency
+          p.image(img, screenX - imgW / 2, screenY - imgH / 2, imgW, imgH);
+          p.tint(255, 255); // reset tint to opaque for any later drawing
+
+          // optional debug border
+          //p.noFill();
+          //p.stroke(255, 0, 0);
+          //p.rect(screenX - imgW / 2, screenY - imgH / 2, imgW, imgH);
+
+          p.drawingContext.enable(p.drawingContext.DEPTH_TEST);
+          p.pop();
+        } else if (!cityOverlayLoaded) {
+          // Show debug text if image not loaded
+          p.resetMatrix();
+          p.ortho();
+          p.push();
+          p.fill(255, 0, 0);
+          p.textSize(18);
+          p.textFont(font);
+          p.text("city-overlay.png not loaded", 40, 60);
+          p.pop();
+        }
+        // --- GPR Glitch Effects ---
+        p.resetMatrix();
+        p.ortho();
+        p.translate(-p.width / 2, -p.height / 2);
+        /*
+        // Horizontal glitch lines (many, subtle)
+        let glitchLineCount = 12 + Math.floor(Math.random() * 8);
+        for (let i = 0; i < glitchLineCount; i++) {
+          let y = Math.floor(Math.random() * p.height);
+          let x1 = Math.floor(Math.random() * p.width * 0.7);
+          let x2 = Math.floor(Math.random() * p.width);
+          if (x2 < x1) [x1, x2] = [x2, x1]; // ensure left-to-right
+          let alpha = 0 + Math.random() * 80;
+          //let thickness = 0.5 + Math.random() / 4;
+          let thickness = 0.75;
+          p.push();
+          p.stroke(255, 255, 255, alpha);
+          p.strokeWeight(thickness);
+          p.line(x1, y, x2, y);
+          p.pop();
+        }
+        */
+        // Horizontal glitch lines (always visible)
+        const minGlitchDistance = 0;
+        const maxGlitchDistance = 500000;
+        if (rendering) {
+          function generateRandomPoint(min, max) {
+            return Math.floor(Math.random() * (max - min + 1)) + min;
+          }
+          for (let i = 0; i < 12 + Math.floor(Math.random() * 8); i++) {
+            let y = generateRandomPoint(0, p.height - 1);
+            let x1 = generateRandomPoint(
+              minGlitchDistance,
+              p.width - minGlitchDistance
+            );
+            let x2 = generateRandomPoint(
+              minGlitchDistance,
+              p.width - minGlitchDistance
+            );
+            /*
+          while (x1 === x2) {
+            x2 = generateRandomPoint(
+              minGlitchDistance,
+              p.width - minGlitchDistance
+            );
+          }*/
+
             let alpha = 0 + Math.random() * 80;
-            //let thickness = 0.5 + Math.random() / 4;
-            let thickness = 0.75;
+            let thickness = 3;
             p.push();
             p.stroke(255, 255, 255, alpha);
             p.strokeWeight(thickness);
             p.line(x1, y, x2, y);
             p.pop();
           }
-          */
-          // Horizontal glitch lines (always visible)
-          const minGlitchDistance = 0;
-          const maxGlitchDistance = 500000;
-          if (rendering) {
-            function generateRandomPoint(min, max) {
-              return Math.floor(Math.random() * (max - min + 1)) + min;
-            }
-            for (let i = 0; i < 12 + Math.floor(Math.random() * 8); i++) {
-              let y = generateRandomPoint(0, p.height - 1);
-              let x1 = generateRandomPoint(
-                minGlitchDistance,
-                p.width - minGlitchDistance
-              );
-              let x2 = generateRandomPoint(
-                minGlitchDistance,
-                p.width - minGlitchDistance
-              );
-              /*
-            while (x1 === x2) {
-              x2 = generateRandomPoint(
-                minGlitchDistance,
-                p.width - minGlitchDistance
-              );
-            }*/
 
-              let alpha = 0 + Math.random() * 80;
-              let thickness = 3;
+          // Occasional major glitch bars (rare, bold)
+          if (Math.random() < 0.05) {
+            let barCount = 1 + Math.floor(Math.random() * 2);
+            for (let i = 0; i < barCount; i++) {
+              let y = Math.floor(Math.random() * p.height);
+              let barHeight = 6 + Math.random() * 16;
+              let alpha = 120 + Math.random() * 100;
+              let color = 200 + Math.random() * 55;
               p.push();
-              p.stroke(255, 255, 255, alpha);
-              p.strokeWeight(thickness);
-              p.line(x1, y, x2, y);
+              p.noStroke();
+              p.fill(color, color, color, alpha);
+              p.rect(0, y, p.width, barHeight);
               p.pop();
             }
-
-            // Occasional major glitch bars (rare, bold)
-            if (Math.random() < 0.05) {
-              let barCount = 1 + Math.floor(Math.random() * 2);
-              for (let i = 0; i < barCount; i++) {
-                let y = Math.floor(Math.random() * p.height);
-                let barHeight = 6 + Math.random() * 16;
-                let alpha = 120 + Math.random() * 100;
-                let color = 200 + Math.random() * 55;
-                p.push();
-                p.noStroke();
-                p.fill(color, color, color, alpha);
-                p.rect(0, y, p.width, barHeight);
-                p.pop();
-              }
-            }
           }
+        }
 
-          // UI text overlay
-          p.push();
-          p.fill(255);
-          p.textSize(12);
-          p.text(
-            `OffsetX: ${offsetX.toFixed(1)} OffsetZ: ${offsetZ.toFixed(1)}`,
-            10,
-            20
-          );
-          p.pop();
-          /*
-          // --- Parabola GPR scan features ---
-          p.push();
-          p.resetMatrix();
-          p.ortho();
-          p.translate(-p.width / 2, -p.height / 2);
+        // UI text overlay
+        p.push();
+        p.fill(255);
+        p.textSize(12);
+        p.text(
+          `OffsetX: ${offsetX.toFixed(1)} OffsetZ: ${offsetZ.toFixed(1)}`,
+          10,
+          20
+        );
+        p.pop();
+        /*
+        // --- Parabola GPR scan features ---
+        p.push();
+        p.resetMatrix();
+        p.ortho();
+        p.translate(-p.width / 2, -p.height / 2);
 
-          p.drawingContext.disable(p.drawingContext.DEPTH_TEST);
+        p.drawingContext.disable(p.drawingContext.DEPTH_TEST);
 
-          p.stroke(0, 255, 255);
-          p.strokeWeight(4);
-          p.noFill();
+        p.stroke(0, 255, 255);
+        p.strokeWeight(4);
+        p.noFill();
 
-          // Parabola center and vertical position affected by offsetX and offsetZ
-          const parabolaWidth = 300;
-          const h = p.width / 2 + -offsetX * 140 * offsetMul; // center x, panned
-          const k = p.height / 2 + offsetZ * 140 * offsetMul; // center y, panned
-          const a = 0.2; // negative for downward, positive for upward
-          p.beginShape();
-          for (
-            let x = h - parabolaWidth / 2;
-            x <= h + parabolaWidth / 2;
-            x += 2
-          ) {
-            let y = a * Math.pow(x - h, 2) + k;
-            p.vertex(x, y);
-          }
-          p.endShape();
+        // Parabola center and vertical position affected by offsetX and offsetZ
+        const parabolaWidth = 300;
+        const h = p.width / 2 + -offsetX * 140 * offsetMul; // center x, panned
+        const k = p.height / 2 + offsetZ * 140 * offsetMul; // center y, panned
+        const a = 0.2; // negative for downward, positive for upward
+        p.beginShape();
+        for (
+          let x = h - parabolaWidth / 2;
+          x <= h + parabolaWidth / 2;
+          x += 2
+        ) {
+          let y = a * Math.pow(x - h, 2) + k;
+          p.vertex(x, y);
+        }
+        p.endShape();
 
-          p.drawingContext.enable(p.drawingContext.DEPTH_TEST);
-          p.pop();
-          */
-        };
-
-        p.windowResized = function () {
-          p.resizeCanvas(p.windowWidth, p.windowHeight);
-        };
+        p.drawingContext.enable(p.drawingContext.DEPTH_TEST);
+        p.pop();
+        */
       };
 
-      window._pInst = new p5(sketch);
-    </script>
-  </body>
+      p.windowResized = function () {
+        p.resizeCanvas(p.windowWidth, p.windowHeight);
+      };
+    };
+
+    window._pInst = new p5(sketch);
+  </script>
+</body>
+
 </html>
