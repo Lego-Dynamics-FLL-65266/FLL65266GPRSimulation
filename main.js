@@ -148,3 +148,11 @@ app.whenReady().then(() => {
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
 });
+// Add this to your Node script to "clean up"
+process.on("SIGINT", async () => {
+  console.log("Cleaning up Bluetooth...");
+  if (peripheral) {
+    await peripheral.disconnectAsync();
+  }
+  process.exit();
+});

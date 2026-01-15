@@ -14,6 +14,7 @@ noble.on("stateChange", (state) => {
     console.log("Scanning for BLE devices...");
     console.log("My Service UUID (raw):", SERVICE_UUID);
     console.log("My Service UUID (scan):", scanUuid);
+    console.log(noble.state);
     noble.startScanning([scanUuid], false);
   } else {
     noble.stopScanning();
@@ -64,7 +65,8 @@ noble.on("discover", (peripheral) => {
           return;
         }
 
-        const targetUuid = CHARACTERISTIC_UUID;
+        const targetUuid = CHARACTERISTIC_UUID.replace(/-/g, "").toLowerCase();
+
         const characteristic = characteristics.find(
           (c) => c.uuid === targetUuid
         );
