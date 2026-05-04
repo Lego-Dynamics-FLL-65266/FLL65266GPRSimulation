@@ -213,7 +213,7 @@
     </script>
 
   <script>
-    let offsetMulCity = 0.861;
+    let offsetMulCity = 0.5;
     // --- Electron IPC ---
     let ipcRenderer;
 
@@ -252,7 +252,7 @@
       if (type == "monitor") {
         offsetMul = 1;
       } else if (type == "computer") {
-        offsetMul = 0.5;
+        offsetMul = 1;
       }
     }
     setScreen("computer");
@@ -461,14 +461,16 @@
             imgH *= 1.5;
           }
           // Calculate screen position so overlay moves with noise
+          const shaderPixelScale = baseNoiseScale * 1.2;
 
           let screenX =
             p.width / 2 -
-            (offsetX * offsetMul * offsetMulCity) / baseNoiseScale;
+            offsetX / shaderPixelScale;
           let screenY =
             p.height / 2 +
-            (offsetZ * offsetMul * offsetMulCity) / baseNoiseScale;
-          screenX += 2000;
+            offsetZ / shaderPixelScale;
+
+          screenX += Math.max(p.width * 1.5, p.width / 2 + imgW / 2);
           p.resetMatrix();
           p.ortho();
           p.push();
