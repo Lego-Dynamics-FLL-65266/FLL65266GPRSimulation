@@ -9,6 +9,7 @@ This is the simulation component of the Lego Dynamics FIRST LEGO League (FLL) Te
 - Parses and interprets delta movement commands
 - Visualizes movement in a 3D or 2D simulation space
 - Supports smoothing, decay, and joystick-like control modes
+- City map on the right btw
 
 ## Expected Input Format
 The simulation expects data in the following format:
