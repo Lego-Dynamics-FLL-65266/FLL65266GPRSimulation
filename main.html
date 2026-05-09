@@ -1,30 +1,3 @@
-<!--<script>
-  // Electron IPC command handling (like index.html)
-  let ipcRenderer;
-  try {
-    ipcRenderer = require("electron").ipcRenderer;
-  } catch (e) {}
-  if (ipcRenderer) {
-    ipcRenderer.on("command", (event, cmd) => {
-      handleCommand(cmd);
-    });
-    ipcRenderer.on("vectorCommand", (event, vec) => {
-      // Accept array, string, or object with x, y, z
-      if (Array.isArray(vec) && vec.length === 3) {
-        handleCommand(`(${vec[0]}, ${vec[1]}, ${vec[2]})`);
-      } else if (typeof vec === "string") {
-        handleCommand(vec);
-      } else if (
-        vec &&
-        typeof vec === "object" &&
-        ["x", "y", "z"].every((k) => k in vec)
-      ) {
-        handleCommand(`(${vec.x}, ${vec.y}, ${vec.z})`);
-      }
-    });
-}
-</script>
--->
 <!doctype html>
 <html>
 

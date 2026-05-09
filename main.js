@@ -18,7 +18,6 @@ function createWindows() {
     },
   });
   visualizerWindow.loadFile("main.html");
-
   visualizerWindow.on("closed", () => {
     if (wsClient) wsClient.close();
     app.quit();
