@@ -11,7 +11,6 @@
   "author": "Arcmyx & The Lego Dynamics FLL Team",
   "license": "ISC",
   "devDependencies": {
-    "@abandonware/noble": "^1.9.2-26",
     "@electron-forge/cli": "^7.8.3",
     "@electron-forge/maker-deb": "^7.8.3",
     "@electron-forge/maker-rpm": "^7.8.3",
