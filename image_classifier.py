@@ -3,14 +3,19 @@ from torch.utils.data import DataLoader, random_split
 from torchvision import datasets, models, transforms
 import torch
 
-data_dir = ".venv/data"
+data_dir = "data"
 
-# Start on the CPU unless CUDA is available
+# Detect available device: XPU (Intel Arc/Iris Xe) > CUDA > CPU
 device = "cpu"
 
-if torch.cuda.is_available():
-    print(f"CUDA is available. Using: {torch.cuda.get_device_name(0)} with CUDA")
+if hasattr(torch, 'xpu') and torch.xpu.is_available():
+    print(f"Intel GPU available. Using XPU: {torch.xpu.get_device_name(0)}")
+    device = "xpu"
+elif torch.cuda.is_available():
+    print(f"CUDA is available. Using: {torch.cuda.get_device_name(0)}")
     device = "cuda"
+else:
+    print("Using CPU")
 
 # Setup the model
 model = models.resnet18(weights="DEFAULT")
@@ -71,7 +76,7 @@ def train_loop(train_loader, optimizer):
         total_loss += loss.item()
     return total_loss
 
-epochs = 10000
+epochs = 50
 # Train the model multiple times through the data
 for epoch in range(epochs):
     total_loss = train_loop(train_loader=train_loader, optimizer=optimizer)
