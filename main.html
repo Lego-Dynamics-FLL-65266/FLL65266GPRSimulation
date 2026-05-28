@@ -240,6 +240,18 @@
       offsetZ = 0;
     let targetOffsetX = 0,
       targetOffsetZ = 0;
+    let bScanBuffer;
+    let bScanRenderAccumulator = 0;
+    const bScanFramesPerSecond = 24;
+    const bScanWorldUnitsPerPixel = 8.0;
+    const bScanDepthUnitsPerPixel = 1.6;
+    const bScanReflectors = [
+      { x: 420, z: -180, depth: 185, strength: 0.95 },
+      { x: 980, z: 260, depth: 310, strength: 0.8 },
+      { x: 1540, z: -90, depth: 245, strength: 0.9 },
+      { x: 2130, z: 420, depth: 390, strength: 0.7 },
+      { x: 2760, z: -330, depth: 150, strength: 0.75 },
+    ];
 
     // --- Command Handling ---
     // Store the latest joystick dx/dz
@@ -302,11 +314,6 @@
         lastDz = 0;
       }
     });
-    // Apply pan at a fixed interval (every 100ms)
-    setInterval(() => {
-      targetOffsetX += lastDx * panStep;
-      targetOffsetZ += lastDz * panStep;
-    }, 100);
     // --- UI Wiring ---
     // Serial button handlers removed
     document.getElementById("simulateBtn").onclick = () => {
@@ -323,6 +330,9 @@
       if (e.key === "x" || e.key === "X") {
         targetOffsetX = 0;
         targetOffsetZ = 0;
+        offsetX = 0;
+        offsetZ = 0;
+        if (window._pInst) initializeBScanBuffer(window._pInst);
       }
       if (e.key === "m") {
         switchFreqs();
@@ -335,6 +345,7 @@
     // --- p5 Sketch ---
     let terrainShader;
     let useSharpNoise = false;
+    const showTopDownOverlay = false;
     let lastTime = performance.now();
     let cityOverlayImg, citySharpImg;
     let cityOverlayLoaded = false,
@@ -357,6 +368,121 @@
       );
     }
 
+    function initializeBScanBuffer(p) {
+      bScanBuffer = p.createGraphics(420, 260);
+      bScanBuffer.pixelDensity(1);
+      bScanBuffer.background(8);
+      bScanBuffer.noStroke();
+      bScanRenderAccumulator = 0;
+    }
+
+    function smoothPulse(distance, width) {
+      const normalized = Math.max(0, Math.min(1, 1 - Math.abs(distance) / width));
+      return normalized * normalized * (3 - 2 * normalized);
+    }
+
+    function sampleBScanIntensity(p, scanX, scanZ, depthPx, timeSeconds, droneX, droneZ) {
+      const depthNorm = depthPx / Math.max(1, bScanBuffer ? bScanBuffer.height : p.height);
+      const soilNoise =
+        p.noise(scanX * 0.006, depthPx * 0.018 + scanZ * 0.004) * 0.42 +
+        p.noise(scanX * 0.023 + 50, depthPx * 0.055) * 0.16;
+      const depthFade = 1 - depthNorm * 0.52;
+      const banding =
+        Math.sin(depthPx * 0.105 + scanX * 0.025) * 0.055 +
+        Math.sin(depthPx * 0.031 + timeSeconds * 2.3) * 0.025;
+      let signal = 0.16 + soilNoise * depthFade + banding;
+
+      for (const target of bScanReflectors) {
+        const targetScanX = target.x - droneX;
+        const targetScanZ = target.z - droneZ;
+        const dx = scanX - targetScanX;
+        const dz = scanZ - targetScanZ;
+        const lateral = Math.sqrt(dx * dx + dz * dz);
+        const reflectorDepth = Math.sqrt(target.depth * target.depth + lateral * lateral * 0.34);
+        const reflector = smoothPulse(depthPx - reflectorDepth, useSharpNoise ? 8 : 14);
+        const footprint = Math.exp(-(lateral * lateral) / (useSharpNoise ? 820000 : 560000));
+        signal += reflector * footprint * target.strength;
+      }
+
+      const speckleRaw =
+        Math.sin((scanX + depthPx * 3.17) * 12.9898 + scanZ * 78.233) * 43758.5453;
+      const speckle = speckleRaw - Math.floor(speckleRaw);
+      signal += (speckle - 0.5) * (useSharpNoise ? 0.11 : 0.07);
+      return Math.max(0, Math.min(1, signal));
+    }
+
+    function renderBScanFrame(p, timeSeconds) {
+      if (!bScanBuffer) return;
+      const width = bScanBuffer.width;
+      const height = bScanBuffer.height;
+      const droneWorldX = offsetX / Math.max(baseNoiseScale, 0.0001);
+      const droneWorldZ = offsetZ / Math.max(baseNoiseScale, 0.0001);
+      bScanBuffer.loadPixels();
+
+      for (let x = 0; x < width; x++) {
+        const scanX = (x - width / 2) * bScanWorldUnitsPerPixel;
+        for (let y = 0; y < height; y++) {
+          const depth = y * bScanDepthUnitsPerPixel;
+          const intensity = sampleBScanIntensity(
+            p,
+            scanX,
+            0,
+            depth,
+            timeSeconds,
+            droneWorldX,
+            droneWorldZ
+          );
+          const gain = Math.max(0.65, 1.15 - y / height * 0.25);
+          const value = Math.max(0, Math.min(255, Math.floor(intensity * gain * 255)));
+          const warmer = useSharpNoise ? 1 : 0.82;
+          const idx = 4 * (y * width + x);
+          bScanBuffer.pixels[idx] = value * warmer;
+          bScanBuffer.pixels[idx + 1] = value * warmer;
+          bScanBuffer.pixels[idx + 2] = value;
+          bScanBuffer.pixels[idx + 3] = 255;
+        }
+      }
+
+      bScanBuffer.updatePixels();
+    }
+
+    function updateBScan(p, dt, timeSeconds) {
+      if (!bScanBuffer) initializeBScanBuffer(p);
+      bScanRenderAccumulator += dt;
+      if (bScanRenderAccumulator >= 1 / bScanFramesPerSecond) {
+        renderBScanFrame(p, timeSeconds);
+        bScanRenderAccumulator %= 1 / bScanFramesPerSecond;
+      }
+    }
+
+    function drawBScanOverlay(p) {
+      if (!bScanBuffer) return;
+      p.resetMatrix();
+      p.ortho();
+      p.push();
+      p.translate(-p.width / 2, -p.height / 2);
+      p.drawingContext.disable(p.drawingContext.DEPTH_TEST);
+      p.tint(255, 255);
+      p.image(bScanBuffer, 0, 0, p.width, p.height);
+
+      p.noStroke();
+      p.fill(255, 255, 255, 140);
+      p.rect(p.width / 2 - 1, 0, 2, p.height);
+      p.fill(0, 0, 0, 70);
+      p.rect(0, 0, p.width, 28);
+      p.fill(230);
+      p.textSize(12);
+      p.textFont(font);
+      p.text(
+        `B-scan live | X ${Math.round(offsetX / baseNoiseScale)} Z ${Math.round(offsetZ / baseNoiseScale)}`,
+        10,
+        19
+      );
+      p.drawingContext.enable(p.drawingContext.DEPTH_TEST);
+      p.pop();
+      p.tint(255, 255);
+    }
+
     let sketch = (p) => {
       p.preload = function () {
         cityOverlayImg = p.loadImage("assets/city-overlay.png", () => {
@@ -377,6 +503,7 @@
         );
         p.noStroke();
         p.textFont(font);
+        initializeBScanBuffer(p);
 
         // Button event for switching frequencies
         document.getElementById("switchFreqBtn").onclick = function () {
@@ -396,9 +523,13 @@
         let dt = (now - lastTime) / 1000;
         lastTime = now;
 
+        targetOffsetX += lastDx * panStep * dt * 10;
+        targetOffsetZ += lastDz * panStep * dt * 10;
+
         const panSpeed = 4.0; // units/sec
         offsetX += (targetOffsetX - offsetX) * Math.min(panSpeed * dt, 1.0);
         offsetZ += (targetOffsetZ - offsetZ) * Math.min(panSpeed * dt, 1.0);
+        updateBScan(p, dt, now / 1000);
 
         const effectiveNoiseScale = baseNoiseScale;
         if (rendering) {
@@ -416,6 +547,9 @@
         p.vertex(1, 1, 0);
         p.endShape();
         p.resetShader();
+        if (rendering) {
+          drawBScanOverlay(p);
+        }
 
         // Overlay city GPR scan image and effects ABOVE the noise, but moving with world offset
         let img, loaded;
@@ -426,7 +560,7 @@
           img = cityOverlayImg;
           loaded = cityOverlayLoaded;
         }
-        if (loaded && img && img.width > 0 && img.height > 0 && rendering) {
+        if (showTopDownOverlay && loaded && img && img.width > 0 && img.height > 0 && rendering) {
           let imgW = 2048;
           let imgH = 3072;
           if (useSharpNoise) {
@@ -461,7 +595,7 @@
 
           p.drawingContext.enable(p.drawingContext.DEPTH_TEST);
           p.pop();
-        } else if (!cityOverlayLoaded) {
+        } else if (showTopDownOverlay && !cityOverlayLoaded) {
           // Show debug text if image not loaded
           p.resetMatrix();
           p.ortho();
@@ -591,6 +725,7 @@
 
       p.windowResized = function () {
         p.resizeCanvas(p.windowWidth, p.windowHeight);
+        initializeBScanBuffer(p);
       };
     };
 
