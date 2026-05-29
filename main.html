@@ -1,601 +1,160 @@
-<!doctype html>
-<html>
+<!-- TODO
+Hi codecrocodile34. 
+
+I have ways you can help with the simulation.
+First of all, there are two curious bugs.
+1. Ghost hyperbolas, where there are no artifacts on the map
+2. When a real non-ghost hyperbola appears it makes the thermal noise disappear and a thick gray bar comes on top. Been trying to fix but please help.
+
+Next, visuals.
+
+So basically, I am working on the visuals (trying to make sure they look like GPR, tuning the parameters, etc.). Once that is done, I will upload the new simulation to GitHub on my branch, push to dev, and pull back to your branch (to sync the changes). See my email to the team about scrapping the Arduino. What I need you to do is remake the UI to look like an actual "D.A.R.T.A. app". Sorry that you get the frontend design, but that's the part I need most right now :D. Right now it looks like vibe coded slop so I need you to fix that. The fonts have been hardcoded to make everything offline; you will probably change that so make sure to update the .ttf's or .woff2's by downloading everything from the source (you're smart enough to do that). Once done push to your branch and I'll handle it.
+
+After you do that, I will integrate it into Node with Electron and delete literally everything we don't need (Arduino scripts, Wi-Fi socket, BLE functionality, etc). Then we should hop on a call to work out cinematics (again, refer to the team email for specifics).
+
+-->
+<!DOCTYPE html>
+<html lang="en">
 
 <head>
-  <meta charset="utf-8" />
-  <title>Simulation</title>
-  <link href="deps/bootstrap.min.css" rel="stylesheet"
-    integrity="sha384-EVSTQN3/azprG1Anm3QDgpJLIm9Nao0Yz1ztcQTwFspd3yD65VohhpuuCOmLASjC" crossorigin="anonymous" />
-  <script src="deps/bootstrap.bundle.min.js"
-    integrity="sha384-MrcW6ZMFYlzcLA8Nl+NtUVF0sA7MsXsP1UyJoMp4YLEuNSfAP+JcXn/tWtIaxVXM"
-    crossorigin="anonymous"></script>
-  <script src="deps/p5.min.js"></script>
-  <script src="deps/p5.dom.min.js"></script>
-
-  <style>
-    html,
-    body,
-    canvas {
-      margin: 0;
-      padding: 0;
-      width: 100vw;
-      height: 100vh;
-      overflow: hidden;
-      box-sizing: border-box;
-    }
-
-    canvas {
-      position: fixed !important;
-      top: 0 !important;
-      left: 0 !important;
-      width: 100vw !important;
-      height: 100vh !important;
-      z-index: 0 !important;
-      display: block !important;
-      background: black;
-    }
-
-    #ui {
-      position: fixed;
-      top: 10px;
-      left: 10px;
-      z-index: 10;
-      background: rgba(30, 30, 30, 0.85);
-      color: #fff;
-      padding: 12px 16px;
-      border-radius: 8px;
-      font-family: sans-serif;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-    }
-
-    #ui input {
-      width: 150px;
-    }
-  </style>
+  <meta charset="UTF-8">
+  <title>GPR Simulator v4 — GPU.js + Three.js</title>
+  <!-- Three.js library for GPU-accelerated rendering -->
+  <script src="assets/three.min.js"></script>
+  <!-- GPU.js for GPU-accelerated computation -->
+  <script src="assets/gpu-browser.min.js"></script>
+  <script defer src="gpr_sim.js"></script>
+  <link href="style.css" rel="stylesheet">
 </head>
 
 <body>
-  <div id="ui">
-    <button id="simulateBtn" class="btn btn-secondary btn-sm mb-1">
-      Simulate
-    </button>
-    <button id="switchFreqBtn" class="btn btn-secondary btn-sm mb-1">
-      Switch frequencies
-    </button>
-    <button id="restartBleBtn" class="btn btn-secondary btn-sm mb-1">
-      Restart BLE
-    </button>
-    <button onclick="toggleRendering()" class="btn btn-secondary btn-sm mb-1">
-      Toggle Rendering
-    </button>
-    <div class="mt-2">
-      <input id="manualInput" class="form-control form-control-sm d-inline-block" style="width: 150px"
-        placeholder="UP/DOWN/LEFT/RIGHT or (x,y,z)" />
-      <button id="sendManual" class="btn btn-secondary btn-sm ms-1">
-        Send
-      </button>
+
+  <div id="ld">
+    <div class="ll">GPR<b style="color:var(--accent2)">SIM</b></div>
+    <div class="ls">SFCW B-SCAN SIMULATOR v3</div>
+    <div class="lbw">
+      <div class="lb" id="lbar"></div>
     </div>
-    <div id="lastCmd" class="mt-2">Input: —</div>
-    <div id="log"></div>
+    <div class="lm" id="lmsg">INITIALISING…</div>
   </div>
-  <script>
-    window.addEventListener("keydown", function (e) {
-      if (e.key === "Escape") {
-        window.close();
-      }
-    });
-  </script>
-  <!-- Shaders -->
-  <script id="vert" type="x-shader/x-vertex">
-      attribute vec3 aPosition;
-      varying vec2 vPos;
-      void main() {
-        vPos = aPosition.xy;
-        gl_Position = vec4(aPosition, 1.0);
-      }
-    </script>
 
-  <script id="frag" type="x-shader/x-fragment">
-          precision highp float;
-          uniform float uOffsetX;
-          uniform float uOffsetY;
-          uniform float uNoiseScale;
+  <div id="topbar">
+    <div class="logo">GPR<b>SIM</b></div>
+    <div class="sep"></div>
+    <span class="tbl">SOIL:</span>
+    <select class="tbs" id="ssel">
+      <option value="dry">Dry Soil</option>
+      <option value="wet">Wet Soil</option>
+    </select>
+    <span class="tbl">MODE:</span>
+    <select class="tbs" id="msel">
+      <option value="general">General</option>
+      <option value="focus">Focus</option>
+      <option value="extreme">Extreme Focus</option>
+    </select>
+    <div class="sep"></div>
+    <button class="tbb" id="bregen">↺ REGEN WORLD</button>
+    <button class="tbb" id="bexp">⬇ EXPORT</button>
+    <div class="sep"></div>
+    <span class="tbl">CMAP:</span>
+    <select class="tbs" id="cmsel">
+      <option value="seismic">Seismic</option>
+      <option value="rdbu">RdBu (GPRPy)</option>
+      <option value="bwr">BWR</option>
+      <option value="gray">Grayscale</option>
+      <option value="hot">Hot</option>
+    </select>
+    <div class="sep"></div>
+    <div class="sdot" id="sdot"></div>
+    <span id="stxt">READY</span>
+  </div>
 
-      uniform vec2 uResolution;
-      uniform bool uSharpMode;
+  <div id="main">
+    <div id="sb">
 
+      <div class="ss">
+        <div class="st">DRONE POSITION</div>
+        <div class="sr"><label>X along-track (m)</label><span class="sv" id="xv">0.0 m</span></div>
+        <input type="range" id="xs" min="0" max="200" value="0" step="1">
+        <div class="sr"><label>Z cross-track (m)</label><span class="sv" id="zv">5.0 m</span></div>
+        <input type="range" id="zs" min="0" max="200" value="100" step="1">
+      </div>
 
-          // Real Perlin noise (gradient noise) implementation
-          vec2 fade(vec2 t) {
-            return t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
-          }
+      <div class="ss">
+        <div class="st">SIGNAL</div>
+        <div class="sr"><label>Gain (dB)</label><span class="sv" id="gv">0 dB</span></div>
+        <input type="range" id="gs" min="-20" max="30" value="0" step="1">
+        <div class="sr"><label>Time window (ns)</label><span class="sv" id="twv">25 ns</span></div>
+        <input type="range" id="tws" min="5" max="80" value="25" step="1">
+        <div class="sr"><label>Clip %</label><span class="sv" id="cv">98%</span></div>
+        <input type="range" id="cs" min="50" max="100" value="99" step="0.5">
+      </div>
 
-          float grad(vec2 hash, vec2 p) {
-            // 8 directions
-            float angle = 6.2831853 * fract(sin(dot(hash, vec2(12.9898,78.233))) * 43758.5453);
-            return dot(p, vec2(cos(angle), sin(angle)));
-          }
+      <div class="ss">
+        <div class="st">PROCESSING</div>
+        <div class="ckr"><input type="checkbox" id="cdewow" checked><label for="cdewow">Dewow</label></div>
+        <div class="ckr"><input type="checkbox" id="cagc"><label for="cagc">AGC depth gain</label></div>
+        <div class="ckr"><input type="checkbox" id="cgrid" checked><label for="cgrid">Depth grid</label></div>
+        <div class="ckr"><input type="checkbox" id="cwiggle"><label for="cwiggle">Wiggle mode</label></div>
+      </div>
 
+      <div class="ss">
+        <div class="st">OBJECTS</div>
+        <div id="ol"></div>
+        <button class="aob" id="badd">+ ADD OBJECT</button>
+      </div>
 
-          float perlin(vec2 p) {
-            vec2 pi = floor(p);
-            vec2 pf = fract(p);
-            // Hash corners
-            vec2 h00 = pi;
-            vec2 h10 = pi + vec2(1.0, 0.0);
-            vec2 h01 = pi + vec2(0.0, 1.0);
-            vec2 h11 = pi + vec2(1.0, 1.0);
-            // Gradients
-            float g00 = grad(h00, pf);
-            float g10 = grad(h10, pf - vec2(1.0, 0.0));
-            float g01 = grad(h01, pf - vec2(0.0, 1.0));
-            float g11 = grad(h11, pf - vec2(1.0, 1.0));
-            // Interpolation
-            vec2 f = fade(pf);
-            float nx0 = mix(g00, g10, f.x);
-            float nx1 = mix(g01, g11, f.x);
-            float nxy = mix(nx0, nx1, f.y);
-            // Normalize to [0,1]
-            return 0.5 + 0.5 * nxy;
-          }
+      <div class="ss">
+        <div class="st">GPR PARAMS</div>
+        <div id="gpp"></div>
+      </div>
 
-          // Fractal Brownian Motion for more detail
+      <div class="ss">
+        <div class="st">COLORMAP</div>
+        <div class="lbar" id="legbar"></div>
+        <div class="llbl"><span>−</span><span>0</span><span>+</span></div>
+      </div>
 
-          float fbm(vec2 p, bool sharp) {
-            float total = 0.0;
-            float amplitude = 0.5;
-            float frequency = 1.0;
-            int octaves = sharp ? 20 : 5;
-            float freqMult = sharp ? 10.0 : 2.0;
-            float ampMult = sharp ? 0.18 : 0.5;
-            for (int i = 0; i < 8; i++) {
-              if (i >= octaves) break;
-              total += perlin(p * frequency) * amplitude;
-              frequency *= freqMult;
-              amplitude *= ampMult;
-            }
-            return total;
-          }
+      <div class="ss">
+        <div class="st">MEDIUM</div>
+        <div id="minfo"></div>
+      </div>
 
-          // Simulate an archaeology-tuned GPR scan
-          void main() {
-            // GPR scans are horizontally banded, with strong reflections and noise
-            vec2 uv = gl_FragCoord.xy * uNoiseScale * 1.2 + vec2(uOffsetX, uOffsetY);
-      float n = fbm(uv, uSharpMode);
-            // Add horizontal banding (simulate time/depth slices)
-            float band = sin(uv.y * 6.0) * 0.08;
-            // Simulate strong reflectors (buried objects)
-            float reflect = smoothstep(0.62, 0.65, n) * 0.7;
-            // Add subtle random noise for realism
-            float grain = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898,78.233))) * 43758.5453) * 0.07 - 0.035;
-            // Combine all effects
-            float gpr = n + band + reflect + grain;
-            gpr = clamp((gpr - 0.45) * 2.0 + 0.5, 0.0, 1.0); // high contrast
-            // Gray color ramp: #111111 (dark) to #7d7d7d (light) for normal, brighter for sharp
-            vec3 dark, light;
-            if (uSharpMode) {
-              dark = vec3(0.32, 0.32, 0.32); // dark gray
-              light = vec3(0.95, 0.95, 0.95); // almost white
-            } else {
-              dark = vec3(0.066, 0.066, 0.066); // #111111
-              light = vec3(0.49, 0.49, 0.49);   // #7d7d7d
-            }
-            vec3 color = mix(dark, light, gpr);
-            gl_FragColor = vec4(color, 1.0);
-          }
-    </script>
+    </div>
 
-  <script>
-    let offsetMulCity = 0.5;
-    // --- Electron IPC ---
-    let ipcRenderer;
+    <div id="centre">
+      <div id="xrul"><canvas id="xrc"></canvas></div>
+      <div id="sa">
+        <canvas id="bc"></canvas>
+        <div id="zrul"><canvas id="zrc"></canvas></div>
+        <div id="chh"></div>
+        <div id="chv"></div>
+        <div id="hi"></div>
+        <div id="mm"><canvas id="mmc"></canvas></div>
+      </div>
+    </div>
 
-    try {
-      ipcRenderer = require("electron").ipcRenderer;
-    } catch (e) { }
-    if (ipcRenderer) {
-      ipcRenderer.on("command", (event, cmd) => handleCommand(cmd));
-      ipcRenderer.on("vectorCommand", (event, vec) => {
-        // Accept {x, z} or array [x, z] or string
-        if (Array.isArray(vec) && vec.length >= 2) {
-          handleCommand(`(${vec[0]}, 0, ${vec[1]})`);
-        } else if (typeof vec === "string") {
-          handleCommand(vec);
-        } else if (
-          vec &&
-          typeof vec === "object" &&
-          "x" in vec &&
-          "z" in vec
-        ) {
-          handleCommand(`(${vec.x}, 0, ${vec.z})`);
-        }
-      });
-    }
-    document.getElementById("restartBleBtn").onclick = () => {
-      ipcRenderer.send("restartBleProcess");
-    };
-    // --- UI Logging ---
-    function log(msg) {
-      const el = document.createElement("div");
-      el.textContent = msg;
-      document.getElementById("log").prepend(el);
-    }
-    let offsetMul = 0.5;
-    function setScreen(type) {
-      if (type == "monitor") {
-        offsetMul = 1;
-      } else if (type == "computer") {
-        offsetMul = 1;
-      }
-    }
-    setScreen("computer");
+    <div id="tp">
+      <div id="th">A-SCAN</div>
+      <div id="tw2"><canvas id="tc"></canvas></div>
+    </div>
+  </div>
 
-    // --- Pan and Zoom State ---
-    let baseNoiseScale = 0.006;
-    const panSpeed = 80;
-    let panStep = panSpeed * baseNoiseScale;
-    // Zoom functionality removed
-
-    let offsetX = 0,
-      offsetZ = 0;
-    let targetOffsetX = 0,
-      targetOffsetZ = 0;
-
-    // --- Command Handling ---
-    // Store the latest joystick dx/dz
-    let lastDx = 0,
-      lastDz = 0;
-    function handleCommand(cmd) {
-      if (!cmd) return;
-      document.getElementById("lastCmd").textContent = "Last: " + cmd;
-      console.log("Command received:", cmd);
-
-      let dx = 0,
-        dz = 0;
-      const tupleMatch = cmd
-        .toString()
-        .match(
-          /^\(?\s*(-?\d*\.?\d+)\s*,\s*(-?\d*\.?\d+)\s*,\s*(-?\d*\.?\d+)\s*\)?$/
-        );
-      if (tupleMatch) {
-        dx = parseFloat(tupleMatch[1]);
-        dz = parseFloat(tupleMatch[3]);
-      } else {
-        const s = cmd.toString().trim().toUpperCase();
-        const map = {
-          UP: [0, 1],
-          DOWN: [0, -1],
-          LEFT: [-1, 0],
-          RIGHT: [1, 0],
-        };
-        if (map[s]) [dx, dz] = map[s];
-        else return;
-      }
-
-      lastDx = Math.max(-1, Math.min(1, dx));
-      lastDz = -Math.max(-1, Math.min(1, dz));
-    }
-    window.addEventListener("keydown", function (e) {
-      if (e.key === "ArrowUp") {
-        lastDx = 0;
-        lastDz = 1;
-      }
-      if (e.key === "ArrowDown") {
-        lastDx = 0;
-        lastDz = -1;
-      }
-      if (e.key === "ArrowLeft") {
-        lastDx = -1;
-        lastDz = 0;
-      }
-      if (e.key === "ArrowRight") {
-        lastDx = 1;
-        lastDz = 0;
-      }
-    });
-
-    window.addEventListener("keyup", function (e) {
-      if (
-        ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)
-      ) {
-        lastDx = 0;
-        lastDz = 0;
-      }
-    });
-    // Apply pan at a fixed interval (every 100ms)
-    setInterval(() => {
-      targetOffsetX += lastDx * panStep;
-      targetOffsetZ += lastDz * panStep;
-    }, 100);
-    // --- UI Wiring ---
-    // Serial button handlers removed
-    document.getElementById("simulateBtn").onclick = () => {
-      const cmds = ["UP", "DOWN", "LEFT", "RIGHT", "(0,1,0)", "(0,-1,0)"];
-      handleCommand(cmds[Math.floor(Math.random() * cmds.length)]);
-    };
-    document.getElementById("sendManual").onclick = () => {
-      const val = document.getElementById("manualInput").value.trim();
-      if (val) handleCommand(val);
-      document.getElementById("manualInput").value = "";
-    };
-
-    window.addEventListener("keydown", function (e) {
-      if (e.key === "x" || e.key === "X") {
-        targetOffsetX = 0;
-        targetOffsetZ = 0;
-      }
-      if (e.key === "m") {
-        switchFreqs();
-      }
-      if (e.key === "g") {
-        toggleRendering();
-      }
-    });
-
-    // --- p5 Sketch ---
-    let terrainShader;
-    let useSharpNoise = false;
-    let lastTime = performance.now();
-    let cityOverlayImg, citySharpImg;
-    let cityOverlayLoaded = false,
-      citySharpLoaded = false;
-    let font;
-    function toggleRendering() {
-      rendering = !rendering;
-    }
-    function switchFreqs() {
-      useSharpNoise = !useSharpNoise;
-      if (useSharpNoise) {
-        baseNoiseScale = 0.004;
-        panStep = panSpeed * baseNoiseScale;
-      } else {
-        baseNoiseScale = 0.006;
-        panStep = panSpeed * baseNoiseScale;
-      }
-      console.log(
-        "Switched to " + (useSharpNoise ? "high" : "low") + " frequency"
-      );
-    }
-
-    let sketch = (p) => {
-      p.preload = function () {
-        cityOverlayImg = p.loadImage("assets/city-overlay.png", () => {
-          cityOverlayLoaded = true;
-        });
-        citySharpImg = p.loadImage("assets/city-sharp.png", () => {
-          citySharpLoaded = true;
-        });
-        font = p.loadFont("assets/proximanova_regular.ttf");
-        switchFreqs();
-        switchFreqs();
-      };
-      p.setup = function () {
-        p.createCanvas(p.windowWidth, p.windowHeight, p.WEBGL);
-        terrainShader = p.createShader(
-          document.getElementById("vert").textContent,
-          document.getElementById("frag").textContent
-        );
-        p.noStroke();
-        p.textFont(font);
-
-        // Button event for switching frequencies
-        document.getElementById("switchFreqBtn").onclick = function () {
-          switchFreqs();
-          this.textContent = useSharpNoise
-            ? "Switch to low frequency"
-            : "Switch to high frequency";
-        };
-      };
-      rendering = true;
-
-      p.draw = function () {
-        // Use background(0) for reliable clearing in WEBGL
-        p.background(0);
-
-        let now = performance.now();
-        let dt = (now - lastTime) / 1000;
-        lastTime = now;
-
-        const panSpeed = 4.0; // units/sec
-        offsetX += (targetOffsetX - offsetX) * Math.min(panSpeed * dt, 1.0);
-        offsetZ += (targetOffsetZ - offsetZ) * Math.min(panSpeed * dt, 1.0);
-
-        const effectiveNoiseScale = baseNoiseScale;
-        if (rendering) {
-          p.shader(terrainShader);
-        }
-        terrainShader.setUniform("uOffsetX", offsetX);
-        terrainShader.setUniform("uOffsetY", offsetZ);
-        terrainShader.setUniform("uNoiseScale", effectiveNoiseScale);
-        terrainShader.setUniform("uSharpMode", useSharpNoise);
-
-        p.beginShape(p.TRIANGLE_STRIP);
-        p.vertex(-1, -1, 0);
-        p.vertex(1, -1, 0);
-        p.vertex(-1, 1, 0);
-        p.vertex(1, 1, 0);
-        p.endShape();
-        p.resetShader();
-
-        // Overlay city GPR scan image and effects ABOVE the noise, but moving with world offset
-        let img, loaded;
-        if (useSharpNoise) {
-          img = citySharpImg;
-          loaded = citySharpLoaded;
-        } else {
-          img = cityOverlayImg;
-          loaded = cityOverlayLoaded;
-        }
-        if (loaded && img && img.width > 0 && img.height > 0 && rendering) {
-          let imgW = 2048;
-          let imgH = 3072;
-          if (useSharpNoise) {
-            imgW *= 1.5;
-            imgH *= 1.5;
-          }
-          // Calculate screen position so overlay moves with noise
-          const shaderPixelScale = baseNoiseScale * 1.2;
-
-          let screenX =
-            p.width / 2 -
-            offsetX / shaderPixelScale;
-          let screenY =
-            p.height / 2 +
-            offsetZ / shaderPixelScale;
-
-          screenX += Math.max(p.width * 1.5, p.width / 2 + imgW / 2);
-          p.resetMatrix();
-          p.ortho();
-          p.push();
-          p.drawingContext.disable(p.drawingContext.DEPTH_TEST);
-
-          // draw overlay image with translucency
-          p.tint(255, 255); // 180/255 alpha for translucency
-          p.image(img, screenX - imgW / 2, screenY - imgH / 2, imgW, imgH);
-          p.tint(255, 255); // reset tint to opaque for any later drawing
-
-          // optional debug border
-          //p.noFill();
-          //p.stroke(255, 0, 0);
-          //p.rect(screenX - imgW / 2, screenY - imgH / 2, imgW, imgH);
-
-          p.drawingContext.enable(p.drawingContext.DEPTH_TEST);
-          p.pop();
-        } else if (!cityOverlayLoaded) {
-          // Show debug text if image not loaded
-          p.resetMatrix();
-          p.ortho();
-          p.push();
-          p.fill(255, 0, 0);
-          p.textSize(18);
-          p.textFont(font);
-          p.text("city-overlay.png not loaded", 40, 60);
-          p.pop();
-        }
-        // --- GPR Glitch Effects ---
-        p.resetMatrix();
-        p.ortho();
-        p.translate(-p.width / 2, -p.height / 2);
-        /*
-        // Horizontal glitch lines (many, subtle)
-        let glitchLineCount = 12 + Math.floor(Math.random() * 8);
-        for (let i = 0; i < glitchLineCount; i++) {
-          let y = Math.floor(Math.random() * p.height);
-          let x1 = Math.floor(Math.random() * p.width * 0.7);
-          let x2 = Math.floor(Math.random() * p.width);
-          if (x2 < x1) [x1, x2] = [x2, x1]; // ensure left-to-right
-          let alpha = 0 + Math.random() * 80;
-          //let thickness = 0.5 + Math.random() / 4;
-          let thickness = 0.75;
-          p.push();
-          p.stroke(255, 255, 255, alpha);
-          p.strokeWeight(thickness);
-          p.line(x1, y, x2, y);
-          p.pop();
-        }
-        */
-        // Horizontal glitch lines (always visible)
-        const minGlitchDistance = 0;
-        const maxGlitchDistance = 500000;
-        if (rendering) {
-          function generateRandomPoint(min, max) {
-            return Math.floor(Math.random() * (max - min + 1)) + min;
-          }
-          for (let i = 0; i < 12 + Math.floor(Math.random() * 8); i++) {
-            let y = generateRandomPoint(0, p.height - 1);
-            let x1 = generateRandomPoint(
-              minGlitchDistance,
-              p.width - minGlitchDistance
-            );
-            let x2 = generateRandomPoint(
-              minGlitchDistance,
-              p.width - minGlitchDistance
-            );
-            /*
-          while (x1 === x2) {
-            x2 = generateRandomPoint(
-              minGlitchDistance,
-              p.width - minGlitchDistance
-            );
-          }*/
-
-            let alpha = 0 + Math.random() * 80;
-            let thickness = 3;
-            p.push();
-            p.stroke(255, 255, 255, alpha);
-            p.strokeWeight(thickness);
-            p.line(x1, y, x2, y);
-            p.pop();
-          }
-
-          // Occasional major glitch bars (rare, bold)
-          if (Math.random() < 0.05) {
-            let barCount = 1 + Math.floor(Math.random() * 2);
-            for (let i = 0; i < barCount; i++) {
-              let y = Math.floor(Math.random() * p.height);
-              let barHeight = 6 + Math.random() * 16;
-              let alpha = 120 + Math.random() * 100;
-              let color = 200 + Math.random() * 55;
-              p.push();
-              p.noStroke();
-              p.fill(color, color, color, alpha);
-              p.rect(0, y, p.width, barHeight);
-              p.pop();
-            }
-          }
-        }
-
-        // UI text overlay
-        p.push();
-        p.fill(255);
-        p.textSize(12);
-        p.text(
-          `OffsetX: ${offsetX.toFixed(1)} OffsetZ: ${offsetZ.toFixed(1)}`,
-          10,
-          20
-        );
-        p.pop();
-        /*
-        // --- Parabola GPR scan features ---
-        p.push();
-        p.resetMatrix();
-        p.ortho();
-        p.translate(-p.width / 2, -p.height / 2);
-
-        p.drawingContext.disable(p.drawingContext.DEPTH_TEST);
-
-        p.stroke(0, 255, 255);
-        p.strokeWeight(4);
-        p.noFill();
-
-        // Parabola center and vertical position affected by offsetX and offsetZ
-        const parabolaWidth = 300;
-        const h = p.width / 2 + -offsetX * 140 * offsetMul; // center x, panned
-        const k = p.height / 2 + offsetZ * 140 * offsetMul; // center y, panned
-        const a = 0.2; // negative for downward, positive for upward
-        p.beginShape();
-        for (
-          let x = h - parabolaWidth / 2;
-          x <= h + parabolaWidth / 2;
-          x += 2
-        ) {
-          let y = a * Math.pow(x - h, 2) + k;
-          p.vertex(x, y);
-        }
-        p.endShape();
-
-        p.drawingContext.enable(p.drawingContext.DEPTH_TEST);
-        p.pop();
-        */
-      };
-
-      p.windowResized = function () {
-        p.resizeCanvas(p.windowWidth, p.windowHeight);
-      };
-    };
-
-    window._pInst = new p5(sketch);
-  </script>
+  <div id="sbar">
+    <div class="sbi">TRACES:<span class="sbv" id="sbt">—</span></div>
+    <div class="sbi">DT:<span class="sbv" id="sbdt">—</span></div>
+    <div class="sbi">FREQ:<span class="sbv" id="sbf">—</span></div>
+    <div class="sbi">X:<span class="sbv" id="sbx">—</span></div>
+    <div class="sbi">Z-LINE:<span class="sbv" id="sbz">—</span></div>
+    <div class="sbi">CURSOR:<span class="sbv" id="sbc">—</span></div>
+  </div>
 </body>
+<script>
+  window.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") {
+      window.close();
+    }
+  });
+</script>
 
 </html>
