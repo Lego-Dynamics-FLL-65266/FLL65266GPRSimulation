@@ -83,8 +83,6 @@ After you do that, I will integrate it into Node with Electron and delete litera
 
       <div class="ss">
         <div class="st">SIGNAL</div>
-        <div class="sr"><label>Gain (dB)</label><span class="sv" id="gv">0 dB</span></div>
-        <input type="range" id="gs" min="-20" max="30" value="0" step="1">
         <div class="sr"><label>Time window (ns)</label><span class="sv" id="twv">25 ns</span></div>
         <input type="range" id="tws" min="5" max="80" value="25" step="1">
         <div class="sr"><label>Clip %</label><span class="sv" id="cv">98%</span></div>
@@ -94,9 +92,7 @@ After you do that, I will integrate it into Node with Electron and delete litera
       <div class="ss">
         <div class="st">PROCESSING</div>
         <div class="ckr"><input type="checkbox" id="cdewow" checked><label for="cdewow">Dewow</label></div>
-        <div class="ckr"><input type="checkbox" id="cagc"><label for="cagc">AGC depth gain</label></div>
         <div class="ckr"><input type="checkbox" id="cgrid" checked><label for="cgrid">Depth grid</label></div>
-        <div class="ckr"><input type="checkbox" id="cwiggle"><label for="cwiggle">Wiggle mode</label></div>
       </div>
 
       <div class="ss">

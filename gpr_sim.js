@@ -134,13 +134,10 @@ const state = {
   mode: "general",
   xPos: 0,
   zPos: 100, // slider values 0-200
-  gain: 0,
   tw: 25,
   clip: 98,
   dewow: true,
-  agc: false,
   grid: true,
-  wiggle: false,
   cmap: "seismic",
   world: null,
   cache: new Map(),
@@ -584,43 +581,6 @@ function synth(xStart, zLine) {
     }
   }
 
-  // ── 8. AGC: trace-by-trace running-RMS gain ───────────────────
-  if (state.agc) {
-    // Compute global RMS for this trace as a floor
-    const win = Math.max(16, (NS * 0.08) | 0);
-    const agcStartSample = (NS * 0.05) | 0;
-
-    for (let t = 0; t < NT; t++) {
-      // Global RMS floor for this trace
-      let globalRms = 0;
-      for (let s = 0; s < NS; s++) globalRms += data[t * NS + s] ** 2;
-      globalRms = Math.sqrt(globalRms / NS);
-
-      for (let s = agcStartSample; s < NS; s++) {
-        let rms = 0,
-          cnt = 0;
-
-        for (let k = -win; k <= win; k++) {
-          const sk = s + k;
-          if (sk >= 0 && sk < NS) {
-            rms += data[t * NS + sk] ** 2;
-            cnt++;
-          }
-        }
-        const localRms = Math.sqrt(rms / cnt);
-        // Blend local and global RMS — prevents runaway gain in dead zones
-        const effectiveRms = localRms * 0.6 + globalRms * 0.4;
-        data[t * NS + s] /= effectiveRms + 0.003;
-      }
-    }
-  }
-
-  // ── 9. User gain ──────────────────────────────────────────────
-  if (state.gain !== 0) {
-    const g = Math.pow(10, state.gain / 20);
-    for (let i = 0; i < data.length; i++) data[i] *= g;
-  }
-
   return data;
 }
 
@@ -673,70 +633,40 @@ function render() {
   bscanCtx.fillStyle = "#000";
   bscanCtx.fillRect(0, 0, W, H);
 
-  if (!state.wiggle) {
-    const imgData = bscanCtx.createImageData(W, H);
-    const pix = imgData.data;
-    const LN = LUT.length / 3;
+  const imgData = bscanCtx.createImageData(W, H);
+  const pix = imgData.data;
+  const LN = LUT.length / 3;
 
-    for (let py = 0; py < H; py++) {
-      const sf = (py / (H - 1)) * (NS - 1);
-      const s0 = sf | 0,
-        s1 = Math.min(s0 + 1, NS - 1),
-        sa = sf - s0,
-        osa = 1 - sa;
+  for (let py = 0; py < H; py++) {
+    const sf = (py / (H - 1)) * (NS - 1);
+    const s0 = sf | 0,
+      s1 = Math.min(s0 + 1, NS - 1),
+      sa = sf - s0,
+      osa = 1 - sa;
 
-      for (let px = 0; px < W; px++) {
-        const tf = (px / (W - 1)) * (NT - 1);
-        const t0 = tf | 0,
-          t1 = Math.min(t0 + 1, NT - 1),
-          ta = tf - t0,
-          ota = 1 - ta;
-        const val =
-          data[t0 * NS + s0] * ota * osa +
-          data[t1 * NS + s0] * ta * osa +
-          data[t0 * NS + s1] * ota * sa +
-          data[t1 * NS + s1] * ta * sa;
+    for (let px = 0; px < W; px++) {
+      const tf = (px / (W - 1)) * (NT - 1);
+      const t0 = tf | 0,
+        t1 = Math.min(t0 + 1, NT - 1),
+        ta = tf - t0,
+        ota = 1 - ta;
+      const val =
+        data[t0 * NS + s0] * ota * osa +
+        data[t1 * NS + s0] * ta * osa +
+        data[t0 * NS + s1] * ota * sa +
+        data[t1 * NS + s1] * ta * sa;
 
-        // Attenuate direct wave in display so it doesn't blow out the scale
-        const norm = Math.max(0, Math.min(1, (val / scale + 1) * 0.5));
-        const ci = ((norm * (LN - 1)) | 0) * 3;
-        const i4 = (py * W + px) * 4;
-        pix[i4] = LUT[ci];
-        pix[i4 + 1] = LUT[ci + 1];
-        pix[i4 + 2] = LUT[ci + 2];
-        pix[i4 + 3] = 255;
-      }
-    }
-    bscanCtx.putImageData(imgData, 0, 0);
-  } else {
-    const nd = Math.min(100, NT),
-      tw2 = W / nd;
-    for (let i = 0; i < nd; i++) {
-      const ti = Math.floor((i / nd) * (NT - 1));
-      const cx = i * tw2 + tw2 / 2;
-      bscanCtx.fillStyle = "rgba(0,229,255,.08)";
-      bscanCtx.beginPath();
-      bscanCtx.moveTo(cx, 0);
-      for (let py = 0; py < H; py++) {
-        const si = Math.floor((py / H) * (NS - 1));
-        bscanCtx.lineTo(
-          cx + Math.max(0, data[ti * NS + si] / scale) * (tw2 * 0.48),
-          py,
-        );
-      }
-      bscanCtx.lineTo(cx, H);
-      bscanCtx.fill();
-      bscanCtx.strokeStyle = "rgba(0,229,255,.6)";
-      bscanCtx.lineWidth = 0.8;
-      bscanCtx.beginPath();
-      for (let py = 0; py < H; py++) {
-        const si = Math.floor((py / H) * (NS - 1));
-        const x = cx + (data[ti * NS + si] / scale) * (tw2 * 0.48);
-        py === 0 ? bscanCtx.moveTo(x, py) : bscanCtx.lineTo(x, py);
-      }
-      bscanCtx.stroke();
+      // Attenuate direct wave in display so it doesn't blow out the scale
+      const norm = Math.max(0, Math.min(1, (val / scale + 1) * 0.5));
+      const ci = ((norm * (LN - 1)) | 0) * 3;
+      const i4 = (py * W + px) * 4;
+      pix[i4] = LUT[ci];
+      pix[i4 + 1] = LUT[ci + 1];
+      pix[i4 + 2] = LUT[ci + 2];
+      pix[i4 + 3] = 255;
     }
   }
+  bscanCtx.putImageData(imgData, 0, 0);
 
   if (state.grid) drawGridToCanvas(bscanCtx, W, H);
 
@@ -1087,12 +1017,6 @@ document.getElementById("zs").addEventListener("input", (e) => {
   document.getElementById("zv").textContent = zLine().toFixed(2) + " m";
   render();
 });
-document.getElementById("gs").addEventListener("input", (e) => {
-  state.gain = +e.target.value;
-  document.getElementById("gv").textContent = state.gain + " dB";
-  state.cache.clear();
-  render();
-});
 document.getElementById("tws").addEventListener("input", (e) => {
   state.tw = +e.target.value;
   document.getElementById("twv").textContent = state.tw + " ns";
@@ -1110,17 +1034,8 @@ document.getElementById("cdewow").addEventListener("change", (e) => {
   state.cache.clear();
   render();
 });
-document.getElementById("cagc").addEventListener("change", (e) => {
-  state.agc = e.target.checked;
-  state.cache.clear();
-  render();
-});
 document.getElementById("cgrid").addEventListener("change", (e) => {
   state.grid = e.target.checked;
-  render();
-});
-document.getElementById("cwiggle").addEventListener("change", (e) => {
-  state.wiggle = e.target.checked;
   render();
 });
 
@@ -1213,7 +1128,7 @@ async function boot() {
     [50, "PLACING OBJECTS & MICRO-SCATTERERS…"],
     [68, "COMPUTING SOIL LAYERS…"],
     [83, "SYNTHESISING SFCW RESPONSE…"],
-    [95, "APPLYING DEWOW + AGC…"],
+    [95, "APPLYING DEWOW…"],
     [100, "READY"],
   ];
   for (const [p, m] of steps) {
