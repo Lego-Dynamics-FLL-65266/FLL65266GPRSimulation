@@ -441,15 +441,22 @@ function synth(xStart, zLine) {
   const tDirect = (2 * (p.alt * 0.01)) / C;
   const fcDirect = fc * 1.8;
   const gap = 0.55 / fcDirect;
+  // Reduce direct wave amplitude to prevent it from interfering with other signals
   for (let t = 0; t < NT; t++) {
-    addWavelet(t, tDirect, 0.25, fcDirect);
-    addWavelet(t, tDirect + gap, 0.1, fcDirect);
-    addWavelet(t, tDirect + gap * 2, 0.03, fcDirect);
+    addWavelet(t, tDirect, 0.15, fcDirect);
+    addWavelet(t, tDirect + gap, 0.06, fcDirect);
+    addWavelet(t, tDirect + gap * 2, 0.015, fcDirect);
   }
 
   // ── 2. Thermal + system noise (very low level) ────────────────
   const nrng = prng(((xStart * 100) | 0) ^ ((zLine * 137) | 0) ^ 0xf00baa);
-  for (let i = 0; i < data.length; i++) data[i] += (nrng() - 0.5) * 0.000008;
+  // Store noise values for later re-application to keep it visible above strong signals
+  const noiseBuffer = new Float32Array(data.length);
+  for (let i = 0; i < data.length; i++) {
+    const noiseVal = (nrng() - 0.5) * 0.000012;
+    noiseBuffer[i] = noiseVal;
+    data[i] += noiseVal;
+  }
 
   // ── 3. (no correlated noise — keep scan clean) ────────────────
   // ── 3. Faint continuous soil layering ────────────────────────
@@ -492,20 +499,23 @@ function synth(xStart, zLine) {
   allObjs.forEach((obj) => {
     const offZ = obj.wz - zLine;
 
-    // Hard beam-width gate: objects beyond 1.5 × their radius are faint ghosts.
+    // Hard beam-width gate: objects beyond 2–3× their radius are essentially invisible.
     const beamSigma = Math.max(obj.radius, 0.12);
     const zFalloff = Math.exp(-(offZ * offZ) / (2 * beamSigma * beamSigma));
 
-    // Anything outside the beam is essentially invisible (< 1% amplitude)
-    if (zFalloff < 0.01) return;
+    // Only process objects that are actually close to the scan line (eliminates ghosts)
+    if (zFalloff < 0.08) return;
 
     const effDepth = Math.sqrt(obj.depth * obj.depth + offZ * offZ);
 
     // Objects right under the scan line get full amplitude.
-    // Objects at the beam edge (zFalloff ~0.05) get ~5% amplitude — barely visible.
+    // Objects at the beam edge (zFalloff ~0.08) get reduced amplitude — barely visible.
     // Apply an extra power so the falloff is sharp rather than gradual.
     const ampScale = Math.pow(zFalloff, 3);
-    const baseAmp = obj.refl * ampScale * 0.3;
+    // User objects should be ghostly (much fainter); world objects are real
+    const isUserObj = state.userObjs.some((u) => u.id === obj.id);
+    const ampMult = isUserObj ? 0.08 : 0.3;
+    const baseAmp = obj.refl * ampScale * ampMult;
 
     for (let t = 0; t < NT; t++) {
       const traceX = xStart + t * dx;
@@ -558,7 +568,13 @@ function synth(xStart, zLine) {
       addWavelet(t, tArr, baseAmp * att * tailFade, fc * (0.8 + 0.4 * nrng()));
     }
   });
-  // ── 6. Dewow: remove DC/low-freq component per time sample ────
+  // ── 6. Re-blend noise to ensure it stays visible above all signals ────────
+  // This prevents strong hyperbolas from drowning out the thermal background
+  for (let i = 0; i < data.length; i++) {
+    data[i] = data[i] * 0.98 + noiseBuffer[i] * 0.02;
+  }
+
+  // ── 7. Dewow: remove DC/low-freq component per time sample ────
   if (state.dewow) {
     for (let s = 0; s < NS; s++) {
       let mean = 0;
@@ -568,7 +584,7 @@ function synth(xStart, zLine) {
     }
   }
 
-  // ── 7. AGC: trace-by-trace running-RMS gain ───────────────────
+  // ── 8. AGC: trace-by-trace running-RMS gain ───────────────────
   if (state.agc) {
     // Compute global RMS for this trace as a floor
     const win = Math.max(16, (NS * 0.08) | 0);
@@ -599,7 +615,7 @@ function synth(xStart, zLine) {
     }
   }
 
-  // ── 8. User gain ──────────────────────────────────────────────
+  // ── 9. User gain ──────────────────────────────────────────────
   if (state.gain !== 0) {
     const g = Math.pow(10, state.gain / 20);
     for (let i = 0; i < data.length; i++) data[i] *= g;
