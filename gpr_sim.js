@@ -37,36 +37,9 @@ const PRESETS = {
       cycle: 0.003748,
     },
   },
-  wet: {
-    general: {
-      alt: 50,
-      fMin: 140e6,
-      fMax: 600e6,
-      fStep: 1.1e6,
-      dwell: 6.0e-6,
-      cycle: 0.002509,
-    },
-    focus: {
-      alt: 20,
-      fMin: 601e6,
-      fMax: 1000e6,
-      fStep: 3.0e6,
-      dwell: 10.0e-6,
-      cycle: 0.00133,
-    },
-    extreme: {
-      alt: 20,
-      fMin: 1001e6,
-      fMax: 1500e6,
-      fStep: 3.0e6,
-      dwell: 15.0e-6,
-      cycle: 0.002495,
-    },
-  },
 };
 const SOIL = {
   dry: { er: 4.0, sigma: 0.001, name: "Dry Soil" },
-  wet: { er: 20.0, sigma: 0.05, name: "Wet Soil" },
 };
 
 // World: 20 m along-track × 10 m cross-track
@@ -78,6 +51,7 @@ const NS = 512; // time samples per trace
 // Each B-scan covers SCAN_W metres along-track
 const SCAN_W = 10.0; // metres of terrain shown per B-scan
 
+// Object type index → template lookup
 const TEMPLATES = [
   {
     type: "pipe",
@@ -129,16 +103,49 @@ const TEMPLATES = [
   },
 ];
 
+// Size labels per type (index matches TEMPLATES)
+// size for pipe/cable: radius in m; void/rock/water/root: radius in m
+const SIZE_UNIT = ["m radius", "m radius", "m radius", "m radius", "m radius", "m radius"];
+
+// ── STATIC OBJECT LIST ────────────────────────────────────────────
+// Each entry: { typeIndex (0-5), x (m, along-track), z (m, cross-track), size (m radius) }
+const STATIC_OBJECTS = [
+  { typeIndex: 0, x: 3.5,  z: 5.2, size: 0.08 },
+  { typeIndex: 2, x: 7.1,  z: 3.8, size: 0.14 },
+  { typeIndex: 1, x: 11.4, z: 6.9, size: 0.10 },
+  { typeIndex: 4, x: 15.2, z: 2.1, size: 0.07 },
+  { typeIndex: 3, x: 5.8,  z: 8.3, size: 0.12 },
+  { typeIndex: 5, x: 9.3,  z: 4.5, size: 0.11 },
+];
+
+function buildUserObjsFromStatic() {
+  return STATIC_OBJECTS.map((entry, i) => {
+    const tmpl = TEMPLATES[entry.typeIndex];
+    return {
+      ...tmpl,
+      id: "s" + i,
+      typeIndex: entry.typeIndex,
+      xFrac: entry.x / WX,
+      zFrac: entry.z / WZ,
+      depthM: 0.6,       // fixed depth for static objects
+      radius: entry.size,
+      x: entry.x,
+      z: entry.z,
+      size: entry.size,
+    };
+  });
+}
+
 const state = {
   soil: "dry",
   mode: "general",
   xPos: 0,
   zPos: 100, // slider values 0-200
-  tw: 25,
-  clip: 98,
+  tw: 25,    // locked at 25 ns
+  clip: 98,  // locked at 98%
   dewow: true,
   grid: true,
-  cmap: "seismic",
+  cmap: "gray",
   world: null,
   cache: new Map(),
   userObjs: [],
@@ -264,103 +271,25 @@ function prng(seed) {
   };
 }
 
-// ── COLOURMAP ─────────────────────────────────────────────────────
-function buildLUT(name, N = 512) {
+// ── COLOURMAP (grayscale only) ────────────────────────────────────
+function buildLUT(N = 512) {
   const lut = new Uint8Array(N * 3);
   for (let i = 0; i < N; i++) {
-    const t = i / (N - 1);
-    let r, g, b;
-    switch (name) {
-      case "seismic":
-      default: {
-        // blue→white→red (classic GPR)
-        if (t < 0.5) {
-          const s = t * 2;
-          r = Math.round(s * 255);
-          g = Math.round(s * 255);
-          b = 255;
-        } else {
-          const s = (t - 0.5) * 2;
-          r = 255;
-          g = Math.round((1 - s) * 255);
-          b = Math.round((1 - s) * 255);
-        }
-        break;
-      }
-      case "rdbu": {
-        const c = [
-          [5, 48, 97],
-          [33, 102, 172],
-          [92, 182, 217],
-          [247, 247, 247],
-          [244, 165, 130],
-          [178, 24, 43],
-          [103, 0, 31],
-        ];
-        const idx = t * (c.length - 1);
-        const lo = idx | 0,
-          hi = Math.min(lo + 1, c.length - 1),
-          f = idx - lo;
-        r = Math.round(c[lo][0] * (1 - f) + c[hi][0] * f);
-        g = Math.round(c[lo][1] * (1 - f) + c[hi][1] * f);
-        b = Math.round(c[lo][2] * (1 - f) + c[hi][2] * f);
-        break;
-      }
-      case "bwr": {
-        if (t < 0.5) {
-          const s = t * 2;
-          r = Math.round(s * 255);
-          g = Math.round(s * 255);
-          b = 255;
-        } else {
-          const s = (t - 0.5) * 2;
-          r = 255;
-          g = Math.round((1 - s) * 255);
-          b = Math.round((1 - s) * 255);
-        }
-        break;
-      }
-      case "gray": {
-        const v = Math.round(t * 255);
-        r = g = b = v;
-        break;
-      }
-      case "hot": {
-        r = Math.min(255, Math.round(t * 3 * 255));
-        g = Math.min(255, Math.max(0, Math.round((t - 1 / 3) * 3 * 255)));
-        b = Math.min(255, Math.max(0, Math.round((t - 2 / 3) * 3 * 255)));
-        break;
-      }
-    }
-    lut[i * 3] = r;
-    lut[i * 3 + 1] = g;
-    lut[i * 3 + 2] = b;
+    const v = Math.round((i / (N - 1)) * 255);
+    lut[i * 3] = v;
+    lut[i * 3 + 1] = v;
+    lut[i * 3 + 2] = v;
   }
   return lut;
 }
-let LUT = buildLUT("seismic");
+let LUT = buildLUT();
 
 // ── WORLD GENERATOR ───────────────────────────────────────────────
-function makeWorld(seed) {
+// Uses a fixed seed so the world is deterministic and identical on every load.
+// Random object placement has been removed; objects come from STATIC_OBJECTS.
+function makeWorld() {
+  const seed = 42;
   const rng = prng(seed);
-
-  // ── Large objects ────────────────────────────────────────────
-  const objs = [];
-  const n = 6 + Math.floor(rng() * 6);
-  for (let i = 0; i < n; i++) {
-    const tmpl = TEMPLATES[Math.floor(rng() * TEMPLATES.length)];
-    objs.push({
-      ...tmpl,
-      id: "w" + i,
-      auto: true,
-      // World 3D position
-      wx: 1 + rng() * (WX - 2), // along-track (m)
-      wz: 0.5 + rng() * (WZ - 1), // cross-track (m)
-      depth: 0.3 + rng() * 1.5, // centre depth (m) — DEEPER for better hyperbolas
-      // radius used only for 3D falloff, not for amplitude suppression
-      radius: 0.05 + rng() * 0.15,
-    });
-  }
 
   // ── Micro-scatterers (clutter, pebbles, roots) ────────────────
   const micro = [];
@@ -392,7 +321,8 @@ function makeWorld(seed) {
     });
   }
 
-  return { seed, objs, micro, layers };
+  // objs is empty — objects come from state.userObjs (loaded from STATIC_OBJECTS)
+  return { seed, objs: [], micro, layers };
 }
 
 // ── RICKER WAVELET ────────────────────────────────────────────────
@@ -433,12 +363,9 @@ function synth(xStart, zLine) {
   }
 
   // ── 1. Direct wave band — flat horizontal wavelets at top of scan ─
-  // In real GPR this is the air/ground coupling pulse: a strong flat
-  // band of 3–4 oscillation cycles pinned to the top few nanoseconds.
   const tDirect = (2 * (p.alt * 0.01)) / C;
   const fcDirect = fc * 1.8;
   const gap = 0.55 / fcDirect;
-  // Reduce direct wave amplitude to prevent it from interfering with other signals
   for (let t = 0; t < NT; t++) {
     addWavelet(t, tDirect, 0.15, fcDirect);
     addWavelet(t, tDirect + gap, 0.06, fcDirect);
@@ -447,7 +374,6 @@ function synth(xStart, zLine) {
 
   // ── 2. Thermal + system noise (very low level) ────────────────
   const nrng = prng(((xStart * 100) | 0) ^ ((zLine * 137) | 0) ^ 0xf00baa);
-  // Store noise values for later re-application to keep it visible above strong signals
   const noiseBuffer = new Float32Array(data.length);
   for (let i = 0; i < data.length; i++) {
     const noiseVal = (nrng() - 0.5) * 0.000012;
@@ -455,7 +381,6 @@ function synth(xStart, zLine) {
     data[i] += noiseVal;
   }
 
-  // ── 3. (no correlated noise — keep scan clean) ────────────────
   // ── 3. Faint continuous soil layering ────────────────────────
   const lrng = prng(((xStart * 71) | 0) ^ ((zLine * 113) | 0));
   W.layers.forEach((layer) => {
@@ -472,47 +397,36 @@ function synth(xStart, zLine) {
       const tArr = (2 * d) / v;
       if (tArr >= tw) continue;
       const att = Math.exp(-d * sp.sigma * 6) * 0.008;
-      addWavelet(t, tArr, layer.refl * att * 0.15, fc * 0.6); // was 0.4
+      addWavelet(t, tArr, layer.refl * att * 0.15, fc * 0.6);
     }
   });
 
   // ── 4. LARGE OBJECTS — hyperbola synthesis ────────────────────
-  // Only objects whose scan line passes very close to them (within
-  // their radius) produce a strong, clearly visible hyperbola.
-  // Objects further away produce an extremely faint ghost so the
-  // scan doesn't look completely empty but they don't dominate.
+  // All objects come from state.userObjs (loaded from STATIC_OBJECTS).
+  // They are rendered with the same ghostly amplitude so they blend
+  // naturally into the scan rather than dominating it.
 
-  const allObjs = [
-    ...W.objs,
-    ...state.userObjs.map((o) => ({
-      ...o,
-      wx: o.xFrac * WX,
-      wz: o.zFrac * WZ,
-      depth: o.depthM,
-      radius: 0.1,
-    })),
-  ];
+  const allObjs = state.userObjs.map((o) => ({
+    ...o,
+    wx: o.xFrac * WX,
+    wz: o.zFrac * WZ,
+    depth: o.depthM,
+    radius: o.radius,
+  }));
 
   allObjs.forEach((obj) => {
     const offZ = obj.wz - zLine;
 
-    // Hard beam-width gate: objects beyond 2–3× their radius are essentially invisible.
     const beamSigma = Math.max(obj.radius, 0.12);
     const zFalloff = Math.exp(-(offZ * offZ) / (2 * beamSigma * beamSigma));
 
-    // Only process objects that are actually close to the scan line (eliminates ghosts)
     if (zFalloff < 0.08) return;
 
     const effDepth = Math.sqrt(obj.depth * obj.depth + offZ * offZ);
 
-    // Objects right under the scan line get full amplitude.
-    // Objects at the beam edge (zFalloff ~0.08) get reduced amplitude — barely visible.
-    // Apply an extra power so the falloff is sharp rather than gradual.
     const ampScale = Math.pow(zFalloff, 3);
-    // User objects should be ghostly (much fainter); world objects are real
-    const isUserObj = state.userObjs.some((u) => u.id === obj.id);
-    const ampMult = isUserObj ? 0.08 : 0.3;
-    const baseAmp = obj.refl * ampScale * ampMult;
+    // All objects rendered ghostly (same as former user-object amplitude)
+    const baseAmp = obj.refl * ampScale * 0.08;
 
     for (let t = 0; t < NT; t++) {
       const traceX = xStart + t * dx;
@@ -523,7 +437,6 @@ function synth(xStart, zLine) {
 
       const depthAtt = Math.exp(-effDepth * sp.sigma * 5);
       const horizAtt = Math.exp(-(dX * dX) / (2 * effDepth * effDepth * 4.0));
-      // Smooth attenuation as hyperbola extends deeper: exponential decay with time
       const tailFade = Math.exp(-(tArr / tw) * (tArr / tw) * 2.5);
       const amp = baseAmp * depthAtt * horizAtt * tailFade;
 
@@ -565,8 +478,8 @@ function synth(xStart, zLine) {
       addWavelet(t, tArr, baseAmp * att * tailFade, fc * (0.8 + 0.4 * nrng()));
     }
   });
-  // ── 6. Re-blend noise to ensure it stays visible above all signals ────────
-  // This prevents strong hyperbolas from drowning out the thermal background
+
+  // ── 6. Re-blend noise to ensure it stays visible above all signals ──
   for (let i = 0; i < data.length; i++) {
     data[i] = data[i] * 0.98 + noiseBuffer[i] * 0.02;
   }
@@ -623,7 +536,7 @@ function render() {
 
   const data = curData();
 
-  // Compute scale excluding direct wave band
+  // Compute scale using locked clip value
   const sorted = Float32Array.from(data).sort();
   const hi = sorted[Math.floor((state.clip / 100) * (sorted.length - 1))];
   const lo =
@@ -656,7 +569,6 @@ function render() {
         data[t0 * NS + s1] * ota * sa +
         data[t1 * NS + s1] * ta * sa;
 
-      // Attenuate direct wave in display so it doesn't blow out the scale
       const norm = Math.max(0, Math.min(1, (val / scale + 1) * 0.5));
       const ci = ((norm * (LN - 1)) | 0) * 3;
       const i4 = (py * W + px) * 4;
@@ -794,8 +706,6 @@ function drawMinimap() {
     ctx.stroke();
     ctx.beginPath();
     ctx.moveTo(0, (i / 4) * H);
-    ctx.lineTo(0, (i / 4) * H); // dummy
-    ctx.moveTo(0, (i / 4) * H);
     ctx.lineTo(W, (i / 4) * H);
     ctx.stroke();
   }
@@ -809,21 +719,13 @@ function drawMinimap() {
     ctx.fillRect((m.wx / WX) * W - 0.5, (m.wz / WZ) * H - 0.5, 1, 1),
   );
 
-  // Large objects
-  W2.objs.forEach((o) => {
-    const px = (o.wx / WX) * W,
-      py = (o.wz / WZ) * H;
+  // Static objects from userObjs
+  state.userObjs.forEach((o) => {
+    const px = o.xFrac * W,
+      py = o.zFrac * H;
     ctx.fillStyle = o.color + "cc";
     ctx.beginPath();
     ctx.arc(px, py, Math.max(2.5, (o.radius / WX) * W * 6), 0, Math.PI * 2);
-    ctx.fill();
-  });
-
-  // User objects
-  state.userObjs.forEach((o) => {
-    ctx.fillStyle = o.color;
-    ctx.beginPath();
-    ctx.arc(o.xFrac * W, o.zFrac * H, 3.5, 0, Math.PI * 2);
     ctx.fill();
   });
 
@@ -947,15 +849,8 @@ function updateGPR() {
 }
 
 function updateLegend() {
-  const g = {
-    seismic: "linear-gradient(to right,#0000ff,#fff,#ff0000)",
-    rdbu: "linear-gradient(to right,#053061,#2166ac,#f7f7f7,#d6604d,#67001f)",
-    bwr: "linear-gradient(to right,#0000ff,#fff,#ff0000)",
-    gray: "linear-gradient(to right,#000,#fff)",
-    hot: "linear-gradient(to right,#000,#f00,#ff0,#fff)",
-  };
   document.getElementById("legbar").style.background =
-    g[state.cmap] || g.seismic;
+    "linear-gradient(to right,#000,#fff)";
 }
 
 function setStatus(txt, col) {
@@ -965,45 +860,34 @@ function setStatus(txt, col) {
   document.getElementById("stxt").textContent = txt;
 }
 
+// ── OBJECT LIST (read-only static display) ────────────────────────
 function renderObjList() {
   const el = document.getElementById("ol");
   el.innerHTML = "";
+
   state.userObjs.forEach((o) => {
     const row = document.createElement("div");
     row.className = "oi";
-    row.innerHTML = `<div class="oc" style="background:${o.color}"></div>
-      <div class="on">${o.label}</div>
-      <div class="od">d=${o.depthM.toFixed(2)}m</div>
-      <button class="ox" data-id="${o.id}">✕</button>`;
+    row.innerHTML = `
+      <div class="oc" style="background:${o.color}"></div>
+      <div class="odata">
+        <div class="on">${o.label}</div>
+        <div class="ofields">
+          <span class="ok">Type</span><span class="ov">${o.typeIndex}</span>
+          <span class="ok">X</span><span class="ov">${o.x.toFixed(2)} m</span>
+          <span class="ok">Z</span><span class="ov">${o.z.toFixed(2)} m</span>
+          <span class="ok">Size</span><span class="ov">${o.size.toFixed(3)} m</span>
+        </div>
+      </div>`;
     el.appendChild(row);
   });
-  el.querySelectorAll(".ox").forEach((b) =>
-    b.addEventListener("click", () => {
-      state.userObjs = state.userObjs.filter((o) => o.id !== b.dataset.id);
-      state.cache.clear();
-      renderObjList();
-      render();
-    }),
-  );
 }
 
 // ── EVENTS ────────────────────────────────────────────────────────
-document.getElementById("ssel").addEventListener("change", (e) => {
-  state.soil = e.target.value;
-  state.cache.clear();
-  updateGPR();
-  render();
-});
 document.getElementById("msel").addEventListener("change", (e) => {
   state.mode = e.target.value;
   state.cache.clear();
   updateGPR();
-  render();
-});
-document.getElementById("cmsel").addEventListener("change", (e) => {
-  state.cmap = e.target.value;
-  LUT = buildLUT(e.target.value);
-  updateLegend();
   render();
 });
 
@@ -1017,18 +901,7 @@ document.getElementById("zs").addEventListener("input", (e) => {
   document.getElementById("zv").textContent = zLine().toFixed(2) + " m";
   render();
 });
-document.getElementById("tws").addEventListener("input", (e) => {
-  state.tw = +e.target.value;
-  document.getElementById("twv").textContent = state.tw + " ns";
-  state.cache.clear();
-  render();
-});
-document.getElementById("cs").addEventListener("input", (e) => {
-  state.clip = +e.target.value;
-  document.getElementById("cv").textContent =
-    (+e.target.value).toFixed(1) + "%";
-  render();
-});
+
 document.getElementById("cdewow").addEventListener("change", (e) => {
   state.dewow = e.target.checked;
   state.cache.clear();
@@ -1039,37 +912,12 @@ document.getElementById("cgrid").addEventListener("change", (e) => {
   render();
 });
 
-document.getElementById("bregen").addEventListener("click", () => {
-  setStatus("GENERATING…", "#ffcc00");
-  setTimeout(() => {
-    state.world = makeWorld(Math.floor(Math.random() * 999999));
-    state.cache.clear();
-    render();
-    setStatus("READY", "#39ff14");
-  }, 20);
-});
 document.getElementById("bexp").addEventListener("click", () => {
-  // Export from Three.js WebGL canvas
   const canvas = threeRenderer.domElement;
   const a = document.createElement("a");
   a.download = `bscan_${state.soil}_${state.mode}_x${xStart().toFixed(1)}_z${zLine().toFixed(2)}.png`;
   a.href = canvas.toDataURL();
   a.click();
-});
-document.getElementById("badd").addEventListener("click", () => {
-  const tmpl = TEMPLATES[Math.floor(Math.random() * TEMPLATES.length)];
-  const rng2 = prng(Date.now());
-  state.userObjs.push({
-    ...tmpl,
-    id: Math.random().toString(36).slice(2),
-    xFrac: 0.1 + rng2() * 0.8,
-    zFrac: rng2(),
-    depthM: 0.3 + rng2() * 1.2,
-    radius: 0.1 + rng2() * 0.1,
-  });
-  state.cache.clear();
-  renderObjList();
-  render();
 });
 
 // Hover crosshair + A-scan
@@ -1123,12 +971,12 @@ async function boot() {
   const lb = document.getElementById("lbar"),
     lm = document.getElementById("lmsg");
   const steps = [
-    [15, "LOADING COLORMAPS…"],
-    [30, "BUILDING 3D WORLD…"],
-    [50, "PLACING OBJECTS & MICRO-SCATTERERS…"],
-    [68, "COMPUTING SOIL LAYERS…"],
-    [83, "SYNTHESISING SFCW RESPONSE…"],
-    [95, "APPLYING DEWOW…"],
+    [15,  "LOADING COLOURMAP…"],
+    [35,  "BUILDING WORLD…"],
+    [55,  "PLACING OBJECTS…"],
+    [72,  "COMPUTING SOIL LAYERS…"],
+    [88,  "SYNTHESISING SFCW RESPONSE…"],
+    [96,  "APPLYING DEWOW…"],
     [100, "READY"],
   ];
   for (const [p, m] of steps) {
@@ -1136,31 +984,31 @@ async function boot() {
     lm.textContent = m;
     await new Promise((r) => setTimeout(r, 140));
   }
+
   initThreeJS();
   setStatus("GENERATING…", "#ffcc00");
-  setTimeout(() => {
-    state.world = makeWorld(Math.floor(Math.random() * 999999));
-    state.cache.clear();
-    render();
-    setStatus("READY", "#39ff14");
-  }, 20);
 
-  state.cmap = "gray";
-  LUT = buildLUT("gray");
-  document.getElementById("cmsel").value = "gray";
+  // Load static objects, build world with fixed seed
+  state.userObjs = buildUserObjsFromStatic();
+  state.world = makeWorld();
+  state.cache.clear();
+
+  LUT = buildLUT();
 
   updateGPR();
   updateLegend();
+  renderObjList();
+
   document.getElementById("xv").textContent = "0.0 m";
   document.getElementById("zv").textContent = (WZ / 2).toFixed(2) + " m";
+
+  render();
+  setStatus("READY", "#39ff14");
 
   const ld = document.getElementById("ld");
   ld.style.transition = "opacity .35s";
   ld.style.opacity = "0";
   await new Promise((r) => setTimeout(r, 380));
   ld.style.display = "none";
-
-  render();
-  setStatus("READY", "#39ff14");
 }
 boot();

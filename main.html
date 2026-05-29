@@ -1,28 +1,10 @@
-<!-- TODO
-Hi codecrocodile34. 
-
-I have ways you can help with the simulation.
-First of all, there are two curious bugs.
-1. Ghost hyperbolas, where there are no artifacts on the map
-2. When a real non-ghost hyperbola appears it makes the thermal noise disappear and a thick gray bar comes on top. Been trying to fix but please help.
-PS. also when i say gray bars in #2 todo i mean when i scroll the z axis, it looks strangely perfect and clean.
-Also, can you make the artifact hyperbolas less obvious, make them as ghostly as the unwanted ghost hyperbolas.
-Next, visuals.
-
-So basically, I am working on the visuals (trying to make sure they look like GPR, tuning the parameters, etc.). Once that is done, I will upload the new simulation to GitHub on my branch, push to dev, and pull back to your branch (to sync the changes). See my email to the team about scrapping the Arduino. What I need you to do is remake the UI to look like an actual "D.A.R.T.A. app". Sorry that you get the frontend design, but that's the part I need most right now :D. Right now it looks like vibe coded slop so I need you to fix that. The fonts have been hardcoded to make everything offline; you will probably change that so make sure to update the .ttf's or .woff2's by downloading everything from the source (you're smart enough to do that). Once done push to your branch and I'll handle it.
-
-After you do that, I will integrate it into Node with Electron and delete literally everything we don't need (Arduino scripts, Wi-Fi socket, BLE functionality, etc). Then we should hop on a call to work out cinematics (again, refer to the team email for specifics).
-
--->
 <!DOCTYPE html>
 <html lang="en">
 
 <head>
   <meta charset="UTF-8">
   <title>GPR Simulator v4 — GPU.js + Three.js</title>
-  <!-- Three.js library for GPU-accelerated rendering -->
   <script src="assets/three.min.js"></script>
-  <!-- GPU.js for GPU-accelerated computation -->
   <script src="assets/gpu-browser.min.js"></script>
   <script defer src="gpr_sim.js"></script>
   <link href="style.css" rel="stylesheet">
@@ -42,11 +24,6 @@ After you do that, I will integrate it into Node with Electron and delete litera
   <div id="topbar">
     <div class="logo">GPR<b>SIM</b></div>
     <div class="sep"></div>
-    <span class="tbl">SOIL:</span>
-    <select class="tbs" id="ssel">
-      <option value="dry">Dry Soil</option>
-      <option value="wet">Wet Soil</option>
-    </select>
     <span class="tbl">MODE:</span>
     <select class="tbs" id="msel">
       <option value="general">General</option>
@@ -54,17 +31,7 @@ After you do that, I will integrate it into Node with Electron and delete litera
       <option value="extreme">Extreme Focus</option>
     </select>
     <div class="sep"></div>
-    <button class="tbb" id="bregen">↺ REGEN WORLD</button>
     <button class="tbb" id="bexp">⬇ EXPORT</button>
-    <div class="sep"></div>
-    <span class="tbl">CMAP:</span>
-    <select class="tbs" id="cmsel">
-      <option value="seismic">Seismic</option>
-      <option value="rdbu">RdBu (GPRPy)</option>
-      <option value="bwr">BWR</option>
-      <option value="gray">Grayscale</option>
-      <option value="hot">Hot</option>
-    </select>
     <div class="sep"></div>
     <div class="sdot" id="sdot"></div>
     <span id="stxt">READY</span>
@@ -82,14 +49,6 @@ After you do that, I will integrate it into Node with Electron and delete litera
       </div>
 
       <div class="ss">
-        <div class="st">SIGNAL</div>
-        <div class="sr"><label>Time window (ns)</label><span class="sv" id="twv">25 ns</span></div>
-        <input type="range" id="tws" min="5" max="80" value="25" step="1">
-        <div class="sr"><label>Clip %</label><span class="sv" id="cv">98%</span></div>
-        <input type="range" id="cs" min="50" max="100" value="99" step="0.5">
-      </div>
-
-      <div class="ss">
         <div class="st">PROCESSING</div>
         <div class="ckr"><input type="checkbox" id="cdewow" checked><label for="cdewow">Dewow</label></div>
         <div class="ckr"><input type="checkbox" id="cgrid" checked><label for="cgrid">Depth grid</label></div>
@@ -98,7 +57,6 @@ After you do that, I will integrate it into Node with Electron and delete litera
       <div class="ss">
         <div class="st">OBJECTS</div>
         <div id="ol"></div>
-        <button class="aob" id="badd">+ ADD OBJECT</button>
       </div>
 
       <div class="ss">
