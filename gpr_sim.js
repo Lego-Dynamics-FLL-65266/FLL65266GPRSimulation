@@ -1,8 +1,3 @@
-/* ================================================================
-    GPR SIMULATOR v4 — GPU.js + Three.js
-    Accelerated synthesis with GPU compute and 3D rendering
-    ================================================================ */
-
 // GPU.js will be initialized lazily when needed
 // (Three.js rendering is GPU-accelerated via WebGL)
 let gpu = null;
@@ -105,17 +100,24 @@ const TEMPLATES = [
 
 // Size labels per type (index matches TEMPLATES)
 // size for pipe/cable: radius in m; void/rock/water/root: radius in m
-const SIZE_UNIT = ["m radius", "m radius", "m radius", "m radius", "m radius", "m radius"];
+const SIZE_UNIT = [
+  "m radius",
+  "m radius",
+  "m radius",
+  "m radius",
+  "m radius",
+  "m radius",
+];
 
 // ── STATIC OBJECT LIST ────────────────────────────────────────────
 // Each entry: { typeIndex (0-5), x (m, along-track), z (m, cross-track), size (m radius) }
 const STATIC_OBJECTS = [
-  { typeIndex: 0, x: 3.5,  z: 5.2, size: 0.08 },
-  { typeIndex: 2, x: 7.1,  z: 3.8, size: 0.14 },
-  { typeIndex: 1, x: 11.4, z: 6.9, size: 0.10 },
+  { typeIndex: 0, x: 3.5, z: 5.2, size: 0.08 },
+  { typeIndex: 2, x: 7.1, z: 3.8, size: 0.14 },
+  { typeIndex: 1, x: 11.4, z: 6.9, size: 0.1 },
   { typeIndex: 4, x: 15.2, z: 2.1, size: 0.07 },
-  { typeIndex: 3, x: 5.8,  z: 8.3, size: 0.12 },
-  { typeIndex: 5, x: 9.3,  z: 4.5, size: 0.11 },
+  { typeIndex: 3, x: 5.8, z: 8.3, size: 0.12 },
+  { typeIndex: 5, x: 9.3, z: 4.5, size: 0.11 },
 ];
 
 function buildUserObjsFromStatic() {
@@ -127,7 +129,7 @@ function buildUserObjsFromStatic() {
       typeIndex: entry.typeIndex,
       xFrac: entry.x / WX,
       zFrac: entry.z / WZ,
-      depthM: 0.6,       // fixed depth for static objects
+      depthM: 0.6, // fixed depth for static objects
       radius: entry.size,
       x: entry.x,
       z: entry.z,
@@ -141,8 +143,8 @@ const state = {
   mode: "general",
   xPos: 0,
   zPos: 100, // slider values 0-200
-  tw: 25,    // locked at 25 ns
-  clip: 98,  // locked at 98%
+  tw: 25, // locked at 25 ns
+  clip: 98, // locked at 98%
   dewow: true,
   grid: true,
   cmap: "gray",
@@ -971,12 +973,12 @@ async function boot() {
   const lb = document.getElementById("lbar"),
     lm = document.getElementById("lmsg");
   const steps = [
-    [15,  "LOADING COLOURMAP…"],
-    [35,  "BUILDING WORLD…"],
-    [55,  "PLACING OBJECTS…"],
-    [72,  "COMPUTING SOIL LAYERS…"],
-    [88,  "SYNTHESISING SFCW RESPONSE…"],
-    [96,  "APPLYING DEWOW…"],
+    [15, "LOADING COLOURMAP…"],
+    [35, "BUILDING WORLD…"],
+    [55, "PLACING OBJECTS…"],
+    [72, "COMPUTING SOIL LAYERS…"],
+    [88, "SYNTHESISING SFCW RESPONSE…"],
+    [96, "APPLYING DEWOW…"],
     [100, "READY"],
   ];
   for (const [p, m] of steps) {
